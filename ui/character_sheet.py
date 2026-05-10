@@ -875,13 +875,14 @@ class CharacterSheetWindow(QMainWindow):
         self._char_data["combat_stats"] = stats
         self._dirty = True
         die   = stats.get("hit_die", 8)
+        ini = stats.get("initiative", 0)
         parts = [
-            f"AC {stats['ac']}",
-            f"Init {'+' if stats['initiative'] >= 0 else ''}{stats['initiative']}",
-            f"Speed {stats['speed']} ft",
+            f"AC {stats.get('ac', 10)}",
+            f"Init {'+' if ini >= 0 else ''}{ini}",
+            f"Speed {stats.get('speed', 30)} ft",
         ]
         line1 = "  ·  ".join(parts)
-        hp_parts = [f"HP {stats['current_hp']}/{stats['max_hp']}"]
+        hp_parts = [f"HP {stats.get('current_hp', 0)}/{stats.get('max_hp', 0)}"]
         if stats.get("temp_hp"):
             hp_parts.append(f"Temp {stats['temp_hp']}")
         hd_total = self._char_data.get("character_info", {}).get("level", 1)
