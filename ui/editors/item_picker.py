@@ -147,6 +147,70 @@ CATEGORIES: list[tuple[str, list]] = [
     ("Packs & Bags",      PACKS),
 ]
 
+# ── Stat lookup tables (used by character_sheet to auto-sync AC & attacks) ────
+
+# name → (ac_base, armor_type)
+# armor_type: "light" = base+DEX, "medium" = base+DEX(max+2), "heavy" = base, "shield" = +2
+ARMOR_DATA: dict[str, tuple[int, str]] = {
+    "Padded Armor":    (11, "light"),
+    "Leather Armor":   (11, "light"),
+    "Studded Leather": (12, "light"),
+    "Hide Armor":      (12, "medium"),
+    "Chain Shirt":     (13, "medium"),
+    "Scale Mail":      (14, "medium"),
+    "Breastplate":     (14, "medium"),
+    "Half Plate":      (15, "medium"),
+    "Ring Mail":       (14, "heavy"),
+    "Chain Mail":      (16, "heavy"),
+    "Splint Armor":    (17, "heavy"),
+    "Plate Armor":     (18, "heavy"),
+    "Shield":          (2,  "shield"),
+}
+
+# name → {damage, dmg_type, finesse, ranged}
+WEAPON_DATA: dict[str, dict] = {
+    # Simple Melee
+    "Club":           {"damage": "1d4",  "dmg_type": "bludgeoning", "finesse": False, "ranged": False},
+    "Dagger":         {"damage": "1d4",  "dmg_type": "piercing",    "finesse": True,  "ranged": False},
+    "Greatclub":      {"damage": "1d8",  "dmg_type": "bludgeoning", "finesse": False, "ranged": False},
+    "Handaxe":        {"damage": "1d6",  "dmg_type": "slashing",    "finesse": False, "ranged": False},
+    "Javelin":        {"damage": "1d6",  "dmg_type": "piercing",    "finesse": False, "ranged": False},
+    "Light Hammer":   {"damage": "1d4",  "dmg_type": "bludgeoning", "finesse": False, "ranged": False},
+    "Mace":           {"damage": "1d6",  "dmg_type": "bludgeoning", "finesse": False, "ranged": False},
+    "Quarterstaff":   {"damage": "1d6",  "dmg_type": "bludgeoning", "finesse": False, "ranged": False},
+    "Sickle":         {"damage": "1d4",  "dmg_type": "slashing",    "finesse": False, "ranged": False},
+    "Spear":          {"damage": "1d6",  "dmg_type": "piercing",    "finesse": False, "ranged": False},
+    # Simple Ranged
+    "Light Crossbow": {"damage": "1d8",  "dmg_type": "piercing",    "finesse": False, "ranged": True},
+    "Dart":           {"damage": "1d4",  "dmg_type": "piercing",    "finesse": True,  "ranged": True},
+    "Shortbow":       {"damage": "1d6",  "dmg_type": "piercing",    "finesse": False, "ranged": True},
+    "Sling":          {"damage": "1d4",  "dmg_type": "bludgeoning", "finesse": False, "ranged": True},
+    # Martial Melee
+    "Battleaxe":      {"damage": "1d8",  "dmg_type": "slashing",    "finesse": False, "ranged": False},
+    "Flail":          {"damage": "1d8",  "dmg_type": "bludgeoning", "finesse": False, "ranged": False},
+    "Glaive":         {"damage": "1d10", "dmg_type": "slashing",    "finesse": False, "ranged": False},
+    "Greataxe":       {"damage": "1d12", "dmg_type": "slashing",    "finesse": False, "ranged": False},
+    "Greatsword":     {"damage": "2d6",  "dmg_type": "slashing",    "finesse": False, "ranged": False},
+    "Halberd":        {"damage": "1d10", "dmg_type": "slashing",    "finesse": False, "ranged": False},
+    "Lance":          {"damage": "1d12", "dmg_type": "piercing",    "finesse": False, "ranged": False},
+    "Longsword":      {"damage": "1d8",  "dmg_type": "slashing",    "finesse": False, "ranged": False},
+    "Maul":           {"damage": "2d6",  "dmg_type": "bludgeoning", "finesse": False, "ranged": False},
+    "Morningstar":    {"damage": "1d8",  "dmg_type": "piercing",    "finesse": False, "ranged": False},
+    "Pike":           {"damage": "1d10", "dmg_type": "piercing",    "finesse": False, "ranged": False},
+    "Rapier":         {"damage": "1d8",  "dmg_type": "piercing",    "finesse": True,  "ranged": False},
+    "Scimitar":       {"damage": "1d6",  "dmg_type": "slashing",    "finesse": True,  "ranged": False},
+    "Shortsword":     {"damage": "1d6",  "dmg_type": "piercing",    "finesse": True,  "ranged": False},
+    "Trident":        {"damage": "1d6",  "dmg_type": "piercing",    "finesse": False, "ranged": False},
+    "War Pick":       {"damage": "1d8",  "dmg_type": "piercing",    "finesse": False, "ranged": False},
+    "Warhammer":      {"damage": "1d8",  "dmg_type": "bludgeoning", "finesse": False, "ranged": False},
+    "Whip":           {"damage": "1d4",  "dmg_type": "slashing",    "finesse": True,  "ranged": False},
+    # Martial Ranged
+    "Hand Crossbow":  {"damage": "1d6",  "dmg_type": "piercing",    "finesse": False, "ranged": True},
+    "Heavy Crossbow": {"damage": "1d10", "dmg_type": "piercing",    "finesse": False, "ranged": True},
+    "Longbow":        {"damage": "1d8",  "dmg_type": "piercing",    "finesse": False, "ranged": True},
+    "Net":            {"damage": "—",    "dmg_type": "special",     "finesse": False, "ranged": True},
+}
+
 # ── Shared styles ─────────────────────────────────────────────────────────────
 
 _SEARCH_CSS = (

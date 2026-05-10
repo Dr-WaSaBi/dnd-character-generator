@@ -694,6 +694,126 @@ class CharacterSheetWindow(QMainWindow):
             lines.append("  ·  ".join(coin_parts))
         self._sections[7].set_preview("\n".join(lines) if lines else "No items or currency.")
         self.statusBar().showMessage("  ✔  Equipment saved.")
+        self._sync_equip_to_stats(data)
+
+    # ── Equipment → combat stats & attacks auto-sync ──────────────────────────
+
+    def _sync_equip_to_stats(self, equip: dict):
+        self._sync_ac_from_equipped(equip)
+        self._sync_attacks_from_equipped(equip)
+
+    def _sync_ac_from_equipped(self, equip: dict):
+        from ui.editors.item_picker import ARMOR_DATA
+        scores = self._char_data.get("ability_scores", {})
+        dex_mod = (scores.get("DEX", 10) - 10) // 2
+
+        equipped = [i for i in equip.get("items", []) if i.get("equipped")]
+        armor_equipped = [i for i in equipped if i["name"] in ARMOR_DATA]
+        if not armor_equipped:
+            return
+
+        body = [i for i in armor_equipped if ARMOR_DATA[i["name"]][1] != "shield"]
+        has_shield = any(ARMOR_DATA[i["name"]][1] == "shield" for i in armor_equipped)
+
+        ac = 10 + dex_mod
+        if body:
+            base, kind = ARMOR_DATA[body[0]["name"]]
+            if kind == "light":
+                ac = base + dex_mod
+            elif kind == "medium":
+                ac = base + min(dex_mod, 2)
+            else:
+                ac = base
+        if has_shield:
+            ac += 2
+
+        combat = self._char_data.setdefault("combat_stats", {})
+        if combat.get("ac") == ac:
+            return
+        combat["ac"] = ac
+        self._rebuild_combat_preview(combat)
+        self.statusBar().showMessage(f"  ⚔  Armor equipped — AC set to {ac}.")
+
+    def _rebuild_combat_preview(self, stats: dict):
+        if not stats:
+            return
+        die = stats.get("hit_die", 8)
+        init = stats.get("initiative", 0)
+        line1 = "  ·  ".join([
+            f"AC {stats.get('ac', '?')}",
+            f"Init {'+' if init >= 0 else ''}{init}",
+            f"Speed {stats.get('speed', 30)} ft",
+        ])
+        hp_parts = [f"HP {stats.get('current_hp', 0)}/{stats.get('max_hp', 0)}"]
+        if stats.get("temp_hp"):
+            hp_parts.append(f"Temp {stats['temp_hp']}")
+        hd_total = self._char_data.get("character_info", {}).get("level", 1)
+        hd_used = stats.get("hit_dice_used", 0)
+        hp_parts.append(f"HD d{die} ({hd_total - hd_used}/{hd_total})")
+        self._sections[5].set_preview(f"{line1}\n{'  ·  '.join(hp_parts)}")
+
+    def _sync_attacks_from_equipped(self, equip: dict):
+        from ui.editors.item_picker import WEAPON_DATA
+        from ui.editors.saving_throws import _prof_bonus
+        scores = self._char_data.get("ability_scores", {})
+        info = self._char_data.get("character_info", {})
+        str_mod = (scores.get("STR", 10) - 10) // 2
+        dex_mod = (scores.get("DEX", 10) - 10) // 2
+        pb = _prof_bonus(info.get("level", 1))
+
+        weapons = [i for i in equip.get("items", [])
+                   if i.get("equipped") and i["name"] in WEAPON_DATA]
+        equipped_names = {w["name"] for w in weapons}
+        if not equipped_names:
+            return
+
+        as_data = self._char_data.setdefault("attacks_spells", {})
+        # Remove any existing auto-entries for these weapons, then re-add fresh
+        kept = [a for a in as_data.get("attacks", [])
+                if a.get("name") not in equipped_names]
+
+        auto = []
+        for item in weapons:
+            wd = WEAPON_DATA[item["name"]]
+            use_dex = wd["ranged"] or (wd["finesse"] and dex_mod > str_mod)
+            mod = dex_mod if use_dex else str_mod
+            bonus = pb + mod
+            sign = "+" if bonus >= 0 else ""
+            dmg_mod = f"+{mod}" if mod > 0 else (str(mod) if mod < 0 else "")
+            auto.append({
+                "name":         item["name"],
+                "attack_bonus": f"{sign}{bonus}",
+                "damage":       f"{wd['damage']}{dmg_mod}",
+                "damage_type":  wd["dmg_type"],
+                "from_equipment": True,
+            })
+
+        as_data["attacks"] = kept + auto
+        self._char_data["attacks_spells"] = as_data
+        self._rebuild_attacks_preview(as_data)
+
+    def _rebuild_attacks_preview(self, data: dict):
+        attacks = data.get("attacks", [])
+        lines = []
+        if attacks:
+            lines.append("  ·  ".join(
+                f"{a['name']} {a.get('attack_bonus','')} {a.get('damage','')}".strip()
+                for a in attacks[:3]
+            ) + ("  …" if len(attacks) > 3 else ""))
+        sp_atk = data.get("spell_atk_bonus")
+        sp_dc  = data.get("spell_save_dc")
+        if sp_atk is not None:
+            sign = "+" if sp_atk >= 0 else ""
+            lines.append(f"Spell Attack {sign}{sp_atk}  ·  Save DC {sp_dc}")
+        slots = data.get("spell_slots_max", [])
+        used  = data.get("spell_slots_used", [])
+        slot_parts = [
+            f"{i+1}▸{mx - (used[i] if i < len(used) else 0)}/{mx}"
+            for i, mx in enumerate(slots) if mx
+        ]
+        if slot_parts:
+            lines.append("Slots: " + "  ".join(slot_parts))
+        self._sections[6].set_preview("\n".join(lines) if lines else "No attacks or spells set.")
 
     def _open_attacks_spells_editor(self):
         dlg = AttacksSpellsEditor(

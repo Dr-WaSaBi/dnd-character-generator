@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QPushButton, QWidget,
-    QLineEdit, QSpinBox, QDoubleSpinBox, QScrollArea,
+    QLineEdit, QSpinBox, QDoubleSpinBox, QScrollArea, QCheckBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -119,6 +119,25 @@ class ItemRow(QWidget):
         self._notes.setFixedHeight(26)
         self._notes.setStyleSheet(_FIELD_CSS)
 
+        self._equipped = QCheckBox("Worn / Wielded")
+        self._equipped.setChecked(d.get("equipped", False))
+        self._equipped.setToolTip(
+            "Check if wearing this armor or wielding this weapon.\n"
+            "Saving equipment will auto-update your AC and weapon attacks."
+        )
+        self._equipped.setFixedWidth(100)
+        self._equipped.setStyleSheet(
+            f"QCheckBox{{color:{COLOR_TEXT_SUBTEXT};"
+            f"font-family:{FONT_BODY};font-size:8pt;background:transparent;}}"
+            f"QCheckBox::indicator{{width:14px;height:14px;"
+            f"border:1px solid {COLOR_SECTION_BORDER};border-radius:2px;"
+            f"background:{COLOR_PARCHMENT_DARK};}}"
+            f"QCheckBox::indicator:checked{{background:{COLOR_BADGE_BG};"
+            f"border-color:{COLOR_GOLD_RULE};}}"
+            f"QCheckBox::indicator:hover{{border-color:{COLOR_SECTION_BORDER_HOVER};}}"
+        )
+        self._equipped.stateChanged.connect(self.changed)
+
         rm = QPushButton("✕")
         rm.setFixedSize(24, 24)
         rm.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -133,14 +152,16 @@ class ItemRow(QWidget):
         row.addWidget(self._qty)
         row.addWidget(self._weight)
         row.addWidget(self._notes, 2)
+        row.addWidget(self._equipped)
         row.addWidget(rm)
 
     def to_dict(self) -> dict:
         return {
-            "name":   self._name.text().strip(),
-            "qty":    self._qty.value(),
-            "weight": self._weight.value(),
-            "notes":  self._notes.text().strip(),
+            "name":     self._name.text().strip(),
+            "qty":      self._qty.value(),
+            "weight":   self._weight.value(),
+            "notes":    self._notes.text().strip(),
+            "equipped": self._equipped.isChecked(),
         }
 
     def total_weight(self) -> float:
@@ -185,6 +206,7 @@ class EquipmentEditor(QDialog):
             ("Qty",   None, 60),
             ("Wt (lb)", None, 70),
             ("Notes",   2, None),
+            ("Worn/Wield", None, 72),
             ("",       None, 24),
         ]:
             lbl = _lbl(text, COLOR_TEXT_SUBTEXT, FONT_BODY, 8, italic=True)
