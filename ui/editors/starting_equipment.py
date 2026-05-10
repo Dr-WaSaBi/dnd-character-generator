@@ -428,7 +428,6 @@ class StartingEquipmentDialog(QDialog):
         cb = QCheckBox(label)
         cb.setChecked(True)
         cb.setStyleSheet(_CHECK_CSS)
-        cb.setWordWrap(True)
         self._item_checks.append((cb, item))
         layout.addWidget(cb)
 
