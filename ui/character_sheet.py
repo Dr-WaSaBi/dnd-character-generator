@@ -1,9 +1,13 @@
+import json
+import os
+
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QScrollArea, QSizePolicy,
+    QMenuBar, QMenu, QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QAction, QKeySequence
 
 from ui.editors import AbilityScoreEditor, CharacterInfoEditor
 from ui.styles import (
@@ -183,7 +187,9 @@ class CharacterSheetWindow(QMainWindow):
         self.resize(1200, 900)
         self._char_data: dict = {}
         self._sections: dict[int, ClickableSection] = {}
+        self._current_file: str | None = None
         self._build_ui()
+        self._build_menu()
 
     def _build_ui(self):
         # Outer dark border feel
@@ -275,6 +281,121 @@ class CharacterSheetWindow(QMainWindow):
         self.statusBar().showMessage(
             "  Select any numbered section above to begin building your character."
         )
+
+    # ── Menu bar ─────────────────────────────────────────────────────────────
+
+    def _build_menu(self):
+        mb = self.menuBar()
+        mb.setStyleSheet(
+            f"QMenuBar{{background:{COLOR_WINDOW_BG};color:#D4AF37;"
+            f"font-family:{FONT_BODY};font-size:9pt;padding:2px;}}"
+            f"QMenuBar::item:selected{{background:#3A1A0A;}}"
+            f"QMenu{{background:{COLOR_WINDOW_BG};color:#D4AF37;"
+            f"font-family:{FONT_BODY};font-size:9pt;border:1px solid #D4AF37;}}"
+            f"QMenu::item:selected{{background:#3A1A0A;}}"
+        )
+        file_menu = mb.addMenu("File")
+
+        act_new = QAction("New Character", self)
+        act_new.setShortcut(QKeySequence.StandardKey.New)
+        act_new.triggered.connect(self._on_new)
+        file_menu.addAction(act_new)
+
+        file_menu.addSeparator()
+
+        act_open = QAction("Open Character…", self)
+        act_open.setShortcut(QKeySequence.StandardKey.Open)
+        act_open.triggered.connect(self._on_open)
+        file_menu.addAction(act_open)
+
+        file_menu.addSeparator()
+
+        act_save = QAction("Save", self)
+        act_save.setShortcut(QKeySequence.StandardKey.Save)
+        act_save.triggered.connect(self._on_save)
+        file_menu.addAction(act_save)
+
+        act_save_as = QAction("Save As…", self)
+        act_save_as.setShortcut(QKeySequence.StandardKey.SaveAs)
+        act_save_as.triggered.connect(self._on_save_as)
+        file_menu.addAction(act_save_as)
+
+    # ── File I/O ──────────────────────────────────────────────────────────────
+
+    def _on_new(self):
+        if self._char_data and not self._confirm_discard():
+            return
+        self._char_data = {}
+        self._current_file = None
+        self._reset_sheet()
+        self.setWindowTitle("D&D 5e Character Generator")
+        self.statusBar().showMessage("  New character — select a section to begin.")
+
+    def _on_open(self):
+        if self._char_data and not self._confirm_discard():
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open Character", "",
+            "D&D Character (*.dnd5e);;JSON Files (*.json);;All Files (*)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._char_data = data
+            self._current_file = path
+            self._apply_loaded_data()
+            self.setWindowTitle(f"D&D 5e — {os.path.basename(path)}")
+            self.statusBar().showMessage(f"  Opened: {os.path.basename(path)}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Open failed", str(exc))
+
+    def _on_save(self):
+        if self._current_file:
+            self._write_file(self._current_file)
+        else:
+            self._on_save_as()
+
+    def _on_save_as(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Character", "",
+            "D&D Character (*.dnd5e);;JSON Files (*.json);;All Files (*)"
+        )
+        if not path:
+            return
+        if not path.endswith((".dnd5e", ".json")):
+            path += ".dnd5e"
+        self._current_file = path
+        self._write_file(path)
+        self.setWindowTitle(f"D&D 5e — {os.path.basename(path)}")
+
+    def _write_file(self, path: str):
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self._char_data, f, indent=2)
+            self.statusBar().showMessage(f"  ✔  Saved: {os.path.basename(path)}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Save failed", str(exc))
+
+    def _confirm_discard(self) -> bool:
+        reply = QMessageBox.question(
+            self, "Unsaved character",
+            "You have unsaved data. Discard and continue?",
+            QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+        )
+        return reply == QMessageBox.StandardButton.Discard
+
+    def _reset_sheet(self):
+        for num, section in self._sections.items():
+            _, title, description, hint = next(s for s in SECTIONS if s[0] == num)
+            section.set_preview(description)
+
+    def _apply_loaded_data(self):
+        if info := self._char_data.get("character_info"):
+            self._on_info_saved(info)
+        if scores := self._char_data.get("ability_scores"):
+            self._on_scores_saved(scores)
 
     def _make_sheet_title(self):
         container = QWidget()
