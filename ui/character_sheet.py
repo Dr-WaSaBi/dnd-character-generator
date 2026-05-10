@@ -640,6 +640,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _open_equipment_editor(self):
         dlg = EquipmentEditor(
+            char_data=self._char_data,
             existing=self._char_data.get("equipment"),
             parent=self,
         )

@@ -5,6 +5,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
+# imported lazily to avoid circular import
+def _open_starting_dialog(char_data: dict, parent) -> "StartingEquipmentDialog":
+    from ui.editors.starting_equipment import StartingEquipmentDialog
+    return StartingEquipmentDialog(char_data=char_data, parent=parent)
+
 from ui.styles import (
     COLOR_PARCHMENT, COLOR_PARCHMENT_DARK, COLOR_PARCHMENT_HOVER,
     COLOR_SECTION_BORDER, COLOR_SECTION_BORDER_HOVER,
@@ -141,13 +146,15 @@ class ItemRow(QWidget):
 class EquipmentEditor(QDialog):
     data_saved = pyqtSignal(dict)
 
-    def __init__(self, existing: dict | None = None, parent=None):
+    def __init__(self, char_data: dict | None = None,
+                 existing: dict | None = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Section ⑦  —  Equipment & Currency")
         self.setMinimumSize(600, 580)
         self.setModal(True)
         self.setStyleSheet(f"QDialog{{background:{COLOR_PARCHMENT};}}")
 
+        self._char_data  = char_data or {}
         self._item_rows: list[ItemRow] = []
         self._coin_spins: dict[str, QSpinBox] = {}
         self._existing = existing or {}
@@ -203,7 +210,7 @@ class EquipmentEditor(QDialog):
         for item in self._existing.get("items", []):
             self._add_item_row(item)
 
-        # Add button + weight total
+        # Add button + starting equipment button + weight total
         bottom_row = QHBoxLayout()
         add_btn = QPushButton("＋  Add Item")
         add_btn.setFixedHeight(30)
@@ -216,6 +223,18 @@ class EquipmentEditor(QDialog):
         )
         add_btn.clicked.connect(lambda: self._add_item_row())
         bottom_row.addWidget(add_btn)
+
+        start_btn = QPushButton("⚔  Starting Equipment…")
+        start_btn.setFixedHeight(30)
+        start_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        start_btn.setStyleSheet(
+            f"QPushButton{{background:{COLOR_BADGE_BG};color:{COLOR_BADGE_TEXT};"
+            f"border:2px solid {COLOR_GOLD_RULE};border-radius:5px;"
+            f"font-family:{FONT_BODY};font-size:10pt;font-weight:bold;padding:0 14px;}}"
+            f"QPushButton:hover{{background:#A02020;}}"
+        )
+        start_btn.clicked.connect(self._on_starting_equipment)
+        bottom_row.addWidget(start_btn)
         bottom_row.addStretch()
         self._weight_lbl = _lbl("Total weight: 0.0 lb", COLOR_TEXT_SUBTEXT,
                                   FONT_BODY, 9, italic=True,
@@ -304,6 +323,18 @@ class EquipmentEditor(QDialog):
         row.deleteLater()
         self._item_rows.remove(row)
         self._update_weight()
+
+    def _on_starting_equipment(self):
+        dlg = _open_starting_dialog(self._char_data, self)
+        dlg.equipment_chosen.connect(self._apply_starting_equipment)
+        dlg.exec()
+
+    def _apply_starting_equipment(self, items: list, gold_gp: int):
+        for item in items:
+            self._add_item_row(item)
+        if gold_gp:
+            current = self._coin_spins["GP"].value()
+            self._coin_spins["GP"].setValue(current + gold_gp)
 
     def _update_weight(self):
         total = sum(r.total_weight() for r in self._item_rows)
