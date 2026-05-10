@@ -10,6 +10,10 @@ def _open_starting_dialog(char_data: dict, parent) -> "StartingEquipmentDialog":
     from ui.editors.starting_equipment import StartingEquipmentDialog
     return StartingEquipmentDialog(char_data=char_data, parent=parent)
 
+def _open_item_picker(parent) -> "ItemPickerDialog":
+    from ui.editors.item_picker import ItemPickerDialog
+    return ItemPickerDialog(parent=parent)
+
 from ui.styles import (
     COLOR_PARCHMENT, COLOR_PARCHMENT_DARK, COLOR_PARCHMENT_HOVER,
     COLOR_SECTION_BORDER, COLOR_SECTION_BORDER_HOVER,
@@ -221,7 +225,7 @@ class EquipmentEditor(QDialog):
             f"font-family:{FONT_BODY};font-size:10pt;padding:0 14px;}}"
             f"QPushButton:hover{{background:{COLOR_PARCHMENT_HOVER};}}"
         )
-        add_btn.clicked.connect(lambda: self._add_item_row())
+        add_btn.clicked.connect(self._on_pick_item)
         bottom_row.addWidget(add_btn)
 
         start_btn = QPushButton("⚔  Starting Equipment…")
@@ -323,6 +327,15 @@ class EquipmentEditor(QDialog):
         row.deleteLater()
         self._item_rows.remove(row)
         self._update_weight()
+
+    def _on_pick_item(self):
+        dlg = _open_item_picker(self)
+        dlg.items_chosen.connect(self._apply_picked_items)
+        dlg.exec()
+
+    def _apply_picked_items(self, items: list):
+        for item in items:
+            self._add_item_row(item)
 
     def _on_starting_equipment(self):
         dlg = _open_starting_dialog(self._char_data, self)

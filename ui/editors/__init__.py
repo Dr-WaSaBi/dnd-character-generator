@@ -9,3 +9,4 @@ from .personality import PersonalityEditor
 from .features import FeaturesEditor
 from .proficiencies import ProficienciesEditor
 from .starting_equipment import StartingEquipmentDialog
+from .item_picker import ItemPickerDialog

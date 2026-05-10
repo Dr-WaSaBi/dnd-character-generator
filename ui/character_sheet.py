@@ -193,6 +193,7 @@ class CharacterSheetWindow(QMainWindow):
         self._char_data: dict = {}
         self._sections: dict[int, ClickableSection] = {}
         self._current_file: str | None = None
+        self._dirty: bool = False
         self._build_ui()
         self._build_menu()
 
@@ -331,13 +332,21 @@ class CharacterSheetWindow(QMainWindow):
         act_starting.triggered.connect(self._on_starting_equipment)
         file_menu.addAction(act_starting)
 
+        file_menu.addSeparator()
+
+        act_quit = QAction("Quit", self)
+        act_quit.setShortcut(QKeySequence("Ctrl+Q"))
+        act_quit.triggered.connect(self.close)
+        file_menu.addAction(act_quit)
+
     # ── File I/O ──────────────────────────────────────────────────────────────
 
     def _on_new(self):
-        if self._char_data and not self._confirm_discard():
+        if self._dirty and not self._confirm_discard():
             return
         self._char_data = {}
         self._current_file = None
+        self._dirty = False
         self._reset_sheet()
         self.setWindowTitle("D&D 5e Character Generator")
         self.statusBar().showMessage("  New character — select a section to begin.")
@@ -354,12 +363,13 @@ class CharacterSheetWindow(QMainWindow):
         equip["items"].extend(items)
         equip["currency"]["GP"] = equip["currency"].get("GP", 0) + gold_gp
         self._on_equipment_saved(equip)
+        self._dirty = True
         self.statusBar().showMessage(
             f"  ✔  Starting equipment applied — {len(items)} items, {gold_gp} gp added."
         )
 
     def _on_open(self):
-        if self._char_data and not self._confirm_discard():
+        if self._dirty and not self._confirm_discard():
             return
         path, _ = QFileDialog.getOpenFileName(
             self, "Open Character", "",
@@ -372,6 +382,7 @@ class CharacterSheetWindow(QMainWindow):
                 data = json.load(f)
             self._char_data = data
             self._current_file = path
+            self._dirty = False
             self._apply_loaded_data()
             self.setWindowTitle(f"D&D 5e — {os.path.basename(path)}")
             self.statusBar().showMessage(f"  Opened: {os.path.basename(path)}")
@@ -401,17 +412,29 @@ class CharacterSheetWindow(QMainWindow):
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self._char_data, f, indent=2)
+            self._dirty = False
             self.statusBar().showMessage(f"  ✔  Saved: {os.path.basename(path)}")
         except Exception as exc:
             QMessageBox.critical(self, "Save failed", str(exc))
 
     def _confirm_discard(self) -> bool:
         reply = QMessageBox.question(
-            self, "Unsaved character",
-            "You have unsaved data. Discard and continue?",
-            QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+            self, "Unsaved changes",
+            "You have unsaved changes. Save before continuing?",
+            QMessageBox.StandardButton.Save |
+            QMessageBox.StandardButton.Discard |
+            QMessageBox.StandardButton.Cancel,
         )
+        if reply == QMessageBox.StandardButton.Save:
+            self._on_save()
+            return True
         return reply == QMessageBox.StandardButton.Discard
+
+    def closeEvent(self, event):
+        if self._dirty and not self._confirm_discard():
+            event.ignore()
+        else:
+            event.accept()
 
     def _reset_sheet(self):
         for num, section in self._sections.items():
@@ -517,6 +540,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _on_info_saved(self, info: dict):
         self._char_data["character_info"] = info
+        self._dirty = True
         parts = []
         if info.get("character_name"):
             parts.append(info["character_name"])
@@ -554,6 +578,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _on_throws_saved(self, throws: dict):
         self._char_data["saving_throws"] = throws
+        self._dirty = True
         from ui.editors.saving_throws import _fmt, _mod, _prof_bonus, FULL_NAMES
         scores = self._char_data.get("ability_scores", {})
         info   = self._char_data.get("character_info", {})
@@ -580,6 +605,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _on_personality_saved(self, data: dict):
         self._char_data["personality"] = data
+        self._dirty = True
         parts = []
         for key, label in [
             ("personality_traits", "Traits"),
@@ -603,6 +629,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _on_features_saved(self, data: dict):
         self._char_data["features"] = data
+        self._dirty = True
         features = data.get("features", [])
         if features:
             preview = "  ·  ".join(f["name"] for f in features[:5])
@@ -624,6 +651,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _on_proficiencies_saved(self, data: dict):
         self._char_data["proficiencies"] = data
+        self._dirty = True
         lines = []
         armor   = data.get("armor", [])
         weapons = data.get("weapons", [])
@@ -649,6 +677,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _on_equipment_saved(self, data: dict):
         self._char_data["equipment"] = data
+        self._dirty = True
         items = data.get("items", [])
         currency = data.get("currency", {})
         lines = []
@@ -677,6 +706,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _on_attacks_spells_saved(self, data: dict):
         self._char_data["attacks_spells"] = data
+        self._dirty = True
         attacks = data.get("attacks", [])
         lines = []
         if attacks:
@@ -712,6 +742,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _on_combat_stats_saved(self, stats: dict):
         self._char_data["combat_stats"] = stats
+        self._dirty = True
         die   = stats.get("hit_die", 8)
         parts = [
             f"AC {stats['ac']}",
@@ -740,6 +771,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _on_skills_saved(self, skills: dict):
         self._char_data["skills"] = skills
+        self._dirty = True
         from ui.editors.skills import SKILLS, _fmt, _mod, _prof_bonus
         scores = self._char_data.get("ability_scores", {})
         info   = self._char_data.get("character_info", {})
@@ -765,6 +797,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _on_scores_saved(self, scores: dict):
         self._char_data["ability_scores"] = scores
+        self._dirty = True
         if not scores:
             return
         # Build preview lines for the section 2 card
