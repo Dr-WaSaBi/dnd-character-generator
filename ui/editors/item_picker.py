@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QPushButton, QWidget,
     QListWidget, QListWidgetItem, QLineEdit,
-    QTabWidget, QSpinBox,
+    QTabWidget, QSpinBox, QScrollArea,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -147,6 +147,56 @@ CATEGORIES: list[tuple[str, list]] = [
     ("Packs & Bags",      PACKS),
 ]
 
+# ── Shared styles ─────────────────────────────────────────────────────────────
+
+_SEARCH_CSS = (
+    f"QLineEdit{{background:{COLOR_PARCHMENT_DARK};"
+    f"color:{COLOR_TEXT_PRIMARY};"
+    f"border:2px solid {COLOR_SECTION_BORDER};border-radius:4px;"
+    f"font-family:{FONT_BODY};font-size:10pt;padding:2px 6px;}}"
+    f"QLineEdit:focus{{border-color:{COLOR_SECTION_BORDER_HOVER};}}"
+)
+
+_TAB_CSS = (
+    f"QTabWidget::pane{{background:{COLOR_PARCHMENT};"
+    f"border:2px solid {COLOR_SECTION_BORDER};border-radius:4px;}}"
+    f"QTabBar::tab{{background:{COLOR_PARCHMENT_DARK};"
+    f"color:{COLOR_TEXT_HEADER};"
+    f"font-family:{FONT_BODY};font-size:9pt;"
+    f"padding:5px 10px;border:1px solid {COLOR_SECTION_BORDER};"
+    f"border-bottom:none;border-radius:4px 4px 0 0;margin-right:2px;}}"
+    f"QTabBar::tab:selected{{background:{COLOR_PARCHMENT};font-weight:bold;}}"
+    f"QTabBar::tab:hover:!selected{{background:{COLOR_PARCHMENT_HOVER};}}"
+)
+
+_LIST_CSS = (
+    f"QListWidget{{background:{COLOR_PARCHMENT};"
+    f"border:none;"
+    f"font-family:{FONT_BODY};font-size:9pt;"
+    f"color:{COLOR_TEXT_PRIMARY};}}"
+    f"QListWidget::item{{padding:4px 6px;"
+    f"border-bottom:1px solid {COLOR_PARCHMENT_DARK};}}"
+    f"QListWidget::item:selected{{background:{COLOR_BADGE_BG};"
+    f"color:{COLOR_BADGE_TEXT};}}"
+    f"QListWidget::item:hover:!selected{{background:{COLOR_PARCHMENT_DARK};}}"
+)
+
+_QTY_CSS = (
+    f"QSpinBox{{background:{COLOR_PARCHMENT_DARK};color:{COLOR_TEXT_PRIMARY};"
+    f"border:2px solid {COLOR_SECTION_BORDER};border-radius:4px;"
+    f"font-family:{FONT_BODY};font-size:10pt;padding:1px 4px;}}"
+    f"QSpinBox:focus{{border-color:{COLOR_SECTION_BORDER_HOVER};}}"
+    f"QSpinBox::up-button,QSpinBox::down-button{{width:16px;}}"
+)
+
+_CART_QTY_CSS = (
+    f"QSpinBox{{background:{COLOR_PARCHMENT_DARK};color:{COLOR_TEXT_PRIMARY};"
+    f"border:1px solid {COLOR_SECTION_BORDER};border-radius:3px;"
+    f"font-family:{FONT_BODY};font-size:9pt;padding:1px 2px;}}"
+    f"QSpinBox:focus{{border-color:{COLOR_SECTION_BORDER_HOVER};}}"
+    f"QSpinBox::up-button,QSpinBox::down-button{{width:14px;}}"
+)
+
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
@@ -170,85 +220,111 @@ def _rule() -> QFrame:
     return f
 
 
+# ── Cart row widget ───────────────────────────────────────────────────────────
+
+class CartRow(QWidget):
+    remove_requested = pyqtSignal(object)
+
+    def __init__(self, name: str, weight: float, notes: str, qty: int = 1, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background:transparent;")
+        self._name = name
+        self._weight = weight
+        self._notes = notes
+        self._build(qty)
+
+    def _build(self, qty: int):
+        row = QHBoxLayout(self)
+        row.setContentsMargins(2, 2, 2, 2)
+        row.setSpacing(6)
+
+        name_lbl = _lbl(self._name, COLOR_TEXT_PRIMARY, FONT_BODY, 9)
+
+        self._qty_spin = QSpinBox()
+        self._qty_spin.setRange(1, 9999)
+        self._qty_spin.setValue(qty)
+        self._qty_spin.setFixedSize(58, 24)
+        self._qty_spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._qty_spin.setStyleSheet(_CART_QTY_CSS)
+
+        wt_lbl = _lbl(f"{self._weight:.1f} lb", COLOR_TEXT_SUBTEXT, FONT_BODY, 8,
+                       align=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        wt_lbl.setFixedWidth(52)
+
+        rm = QPushButton("✕")
+        rm.setFixedSize(22, 22)
+        rm.setCursor(Qt.CursorShape.PointingHandCursor)
+        rm.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{COLOR_TEXT_SUBTEXT};"
+            f"border:1px solid {COLOR_SECTION_BORDER};border-radius:3px;font-size:9pt;}}"
+            f"QPushButton:hover{{color:{COLOR_BADGE_BG};border-color:{COLOR_BADGE_BG};}}"
+        )
+        rm.clicked.connect(lambda: self.remove_requested.emit(self))
+
+        row.addWidget(name_lbl, 1)
+        row.addWidget(_lbl("×", COLOR_TEXT_SUBTEXT, FONT_BODY, 9))
+        row.addWidget(self._qty_spin)
+        row.addWidget(wt_lbl)
+        row.addWidget(rm)
+
+    def to_dict(self) -> dict:
+        return {
+            "name":   self._name,
+            "qty":    self._qty_spin.value(),
+            "weight": self._weight,
+            "notes":  self._notes,
+        }
+
+
+# ── Main dialog ───────────────────────────────────────────────────────────────
+
 class ItemPickerDialog(QDialog):
-    """Select one or more items from the PHB catalog and return them."""
+    """Browse the item catalog across tabs, build a cart, then save all at once."""
     items_chosen = pyqtSignal(list)   # list of {name, qty, weight, notes}
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Browse Items")
-        self.setMinimumSize(620, 540)
+        self.setWindowTitle("Browse & Add Items")
+        self.setMinimumSize(660, 680)
         self.setModal(True)
         self.setStyleSheet(f"QDialog{{background:{COLOR_PARCHMENT};}}")
+        self._cart_rows: list[CartRow] = []
         self._build_ui()
 
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 16, 20, 16)
-        root.setSpacing(10)
+        root.setSpacing(8)
 
-        root.addWidget(_lbl("📦  BROWSE  ITEMS", COLOR_TEXT_HEADER, FONT_HEADER, 15,
+        root.addWidget(_lbl("BROWSE  ITEMS", COLOR_TEXT_HEADER, FONT_HEADER, 15,
                              bold=True, align=Qt.AlignmentFlag.AlignCenter))
 
         # Search
         search_row = QHBoxLayout()
         search_row.addWidget(_lbl("Search:", COLOR_TEXT_HEADER, FONT_BODY, 10))
         self._search = QLineEdit()
-        self._search.setPlaceholderText("Type to filter…")
+        self._search.setPlaceholderText("Type to filter items…")
         self._search.setFixedHeight(28)
-        self._search.setStyleSheet(
-            f"QLineEdit{{background:{COLOR_PARCHMENT_DARK};"
-            f"color:{COLOR_TEXT_PRIMARY};"
-            f"border:2px solid {COLOR_SECTION_BORDER};border-radius:4px;"
-            f"font-family:{FONT_BODY};font-size:10pt;padding:2px 6px;}}"
-            f"QLineEdit:focus{{border-color:{COLOR_SECTION_BORDER_HOVER};}}"
-        )
+        self._search.setStyleSheet(_SEARCH_CSS)
         self._search.textChanged.connect(self._on_search)
         search_row.addWidget(self._search, 1)
         root.addLayout(search_row)
 
         root.addWidget(_rule())
 
-        # Tabs
+        # Item tabs
         self._tabs = QTabWidget()
-        self._tabs.setStyleSheet(
-            f"QTabWidget::pane{{background:{COLOR_PARCHMENT};"
-            f"border:2px solid {COLOR_SECTION_BORDER};border-radius:4px;}}"
-            f"QTabBar::tab{{background:{COLOR_PARCHMENT_DARK};"
-            f"color:{COLOR_TEXT_HEADER};"
-            f"font-family:{FONT_BODY};font-size:9pt;"
-            f"padding:5px 12px;border:1px solid {COLOR_SECTION_BORDER};"
-            f"border-bottom:none;border-radius:4px 4px 0 0;margin-right:2px;}}"
-            f"QTabBar::tab:selected{{background:{COLOR_PARCHMENT};"
-            f"font-weight:bold;}}"
-            f"QTabBar::tab:hover:!selected{{background:{COLOR_PARCHMENT_HOVER};}}"
-        )
-
-        _LIST_CSS = (
-            f"QListWidget{{background:{COLOR_PARCHMENT};"
-            f"border:none;"
-            f"font-family:{FONT_BODY};font-size:9pt;"
-            f"color:{COLOR_TEXT_PRIMARY};}}"
-            f"QListWidget::item{{padding:4px 6px;"
-            f"border-bottom:1px solid {COLOR_PARCHMENT_DARK};}}"
-            f"QListWidget::item:selected{{background:{COLOR_BADGE_BG};"
-            f"color:{COLOR_BADGE_TEXT};}}"
-            f"QListWidget::item:hover:!selected{{background:{COLOR_PARCHMENT_DARK};}}"
-        )
-
+        self._tabs.setStyleSheet(_TAB_CSS)
         self._lists: dict[str, QListWidget] = {}
-        self._all_items: list[tuple[str, float, str]] = []
 
         for cat_name, items in CATEGORIES:
             lst = QListWidget()
             lst.setStyleSheet(_LIST_CSS)
-            lst.setAlternatingRowColors(False)
             lst.itemDoubleClicked.connect(self._on_double_click)
             for name, weight, notes in items:
-                item = QListWidgetItem(f"{name}  —  {notes}")
-                item.setData(Qt.ItemDataRole.UserRole, (name, weight, notes))
-                lst.addItem(item)
-                self._all_items.append((name, weight, notes))
+                li = QListWidgetItem(f"{name}  —  {notes}")
+                li.setData(Qt.ItemDataRole.UserRole, (name, weight, notes))
+                lst.addItem(li)
             self._lists[cat_name] = lst
             tab = QWidget()
             tab.setStyleSheet(f"background:{COLOR_PARCHMENT};")
@@ -257,72 +333,121 @@ class ItemPickerDialog(QDialog):
             tlo.addWidget(lst)
             self._tabs.addTab(tab, cat_name)
 
-        root.addWidget(self._tabs, 1)
+        root.addWidget(self._tabs, 3)
 
-        root.addWidget(_rule())
-
-        # Qty + buttons
-        bottom = QHBoxLayout()
-        bottom.addWidget(_lbl("Qty:", COLOR_TEXT_HEADER, FONT_BODY, 10))
+        # Qty row + "Add to Cart" button
+        pick_row = QHBoxLayout()
+        pick_row.addWidget(_lbl("Qty:", COLOR_TEXT_HEADER, FONT_BODY, 10))
         self._qty = QSpinBox()
         self._qty.setRange(1, 9999)
         self._qty.setValue(1)
-        self._qty.setFixedSize(60, 32)
+        self._qty.setFixedSize(62, 30)
         self._qty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._qty.setStyleSheet(
-            f"QSpinBox{{background:{COLOR_PARCHMENT_DARK};color:{COLOR_TEXT_PRIMARY};"
-            f"border:2px solid {COLOR_SECTION_BORDER};border-radius:4px;"
-            f"font-family:{FONT_BODY};font-size:10pt;padding:1px 4px;}}"
-            f"QSpinBox:focus{{border-color:{COLOR_SECTION_BORDER_HOVER};}}"
-            f"QSpinBox::up-button,QSpinBox::down-button{{width:16px;}}"
+        self._qty.setStyleSheet(_QTY_CSS)
+        pick_row.addWidget(self._qty)
+        pick_row.addWidget(
+            _lbl("Select an item above, set qty, then click Add to Cart  (or double-click to add qty 1)",
+                 COLOR_TEXT_SUBTEXT, FONT_BODY, 8, italic=True), 1
         )
-        bottom.addWidget(self._qty)
-        bottom.addStretch()
 
-        hint = _lbl("Double-click or select and click Add", COLOR_TEXT_SUBTEXT,
-                     FONT_BODY, 8, italic=True)
-        bottom.addWidget(hint)
-        bottom.addSpacing(12)
+        add_btn = QPushButton("＋  Add to Cart")
+        add_btn.setFixedHeight(30)
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_btn.setStyleSheet(
+            f"QPushButton{{background:{COLOR_BADGE_BG};color:{COLOR_BADGE_TEXT};"
+            f"border:2px solid {COLOR_GOLD_RULE};border-radius:5px;"
+            f"font-family:{FONT_HEADER};font-size:10pt;font-weight:bold;padding:0 14px;}}"
+            f"QPushButton:hover{{background:#A02020;}}"
+        )
+        add_btn.clicked.connect(self._on_add_to_cart)
+        pick_row.addWidget(add_btn)
+        root.addLayout(pick_row)
 
+        root.addWidget(_rule())
+
+        # Cart header
+        cart_hdr = QHBoxLayout()
+        cart_hdr.addWidget(_lbl("SELECTED ITEMS", COLOR_TEXT_HEADER, FONT_BODY, 9, bold=True))
+        cart_hdr.addStretch()
+        self._count_lbl = _lbl("Nothing selected yet", COLOR_TEXT_SUBTEXT, FONT_BODY, 8,
+                                italic=True, align=Qt.AlignmentFlag.AlignRight)
+        cart_hdr.addWidget(self._count_lbl)
+        root.addLayout(cart_hdr)
+
+        # Cart scroll area
+        cart_scroll = QScrollArea()
+        cart_scroll.setWidgetResizable(True)
+        cart_scroll.setFixedHeight(150)
+        cart_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        cart_scroll.setStyleSheet(
+            f"QScrollArea{{border:1px solid {COLOR_SECTION_BORDER};"
+            f"border-radius:4px;background:{COLOR_PARCHMENT_DARK};}}"
+            f"QScrollArea>QWidget>QWidget{{background:{COLOR_PARCHMENT_DARK};}}"
+        )
+
+        self._cart_inner = QWidget()
+        self._cart_inner.setStyleSheet(f"background:{COLOR_PARCHMENT_DARK};")
+        self._cart_layout = QVBoxLayout(self._cart_inner)
+        self._cart_layout.setContentsMargins(6, 4, 6, 4)
+        self._cart_layout.setSpacing(2)
+
+        self._empty_lbl = _lbl(
+            "Your cart is empty — select items above and click  ＋ Add to Cart",
+            COLOR_TEXT_SUBTEXT, FONT_BODY, 8, italic=True,
+            align=Qt.AlignmentFlag.AlignCenter,
+        )
+        self._cart_layout.addWidget(self._empty_lbl)
+        self._cart_layout.addStretch()
+
+        cart_scroll.setWidget(self._cart_inner)
+        root.addWidget(cart_scroll)
+
+        root.addWidget(_rule())
+
+        # Bottom buttons
+        btn_row = QHBoxLayout()
         cancel = QPushButton("Cancel")
         cancel.setFixedHeight(34)
         cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel.setStyleSheet(
             f"QPushButton{{background:{COLOR_PARCHMENT_DARK};color:{COLOR_TEXT_HEADER};"
             f"border:2px solid {COLOR_SECTION_BORDER};border-radius:6px;"
-            f"font-family:{FONT_BODY};font-size:10pt;padding:0 14px;}}"
+            f"font-family:{FONT_BODY};font-size:10pt;padding:0 16px;}}"
             f"QPushButton:hover{{background:{COLOR_PARCHMENT_HOVER};}}"
         )
         cancel.clicked.connect(self.reject)
-        bottom.addWidget(cancel)
+        btn_row.addWidget(cancel)
+        btn_row.addStretch()
 
-        add_btn = QPushButton("＋  Add to Equipment")
-        add_btn.setFixedHeight(34)
-        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        add_btn.setStyleSheet(
+        self._save_btn = QPushButton("✔  Add to Equipment")
+        self._save_btn.setFixedHeight(34)
+        self._save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._save_btn.setEnabled(False)
+        self._save_btn.setStyleSheet(
             f"QPushButton{{background:{COLOR_BADGE_BG};color:{COLOR_BADGE_TEXT};"
             f"border:2px solid {COLOR_GOLD_RULE};border-radius:6px;"
-            f"font-family:{FONT_HEADER};font-size:10pt;font-weight:bold;padding:0 16px;}}"
+            f"font-family:{FONT_HEADER};font-size:11pt;font-weight:bold;padding:0 20px;}}"
             f"QPushButton:hover{{background:#A02020;}}"
+            f"QPushButton:disabled{{background:#5A3030;color:#A08080;"
+            f"border-color:#8B6060;}}"
         )
-        add_btn.clicked.connect(self._on_add)
-        bottom.addWidget(add_btn)
-
-        root.addLayout(bottom)
+        self._save_btn.clicked.connect(self._on_save)
+        btn_row.addWidget(self._save_btn)
+        root.addLayout(btn_row)
 
     # ── Search ────────────────────────────────────────────────────────────────
 
     def _on_search(self, text: str):
         text = text.strip().lower()
-        for cat_name, lst in self._lists.items():
+        for lst in self._lists.values():
             for i in range(lst.count()):
                 item = lst.item(i)
                 name, _, _ = item.data(Qt.ItemDataRole.UserRole)
                 item.setHidden(bool(text) and text not in name.lower())
 
-    # ── Selection ─────────────────────────────────────────────────────────────
+    # ── Cart management ───────────────────────────────────────────────────────
 
-    def _current_item(self) -> tuple | None:
+    def _current_item_data(self) -> tuple | None:
         lst = self._tabs.currentWidget().layout().itemAt(0).widget()
         selected = lst.selectedItems()
         if not selected:
@@ -333,17 +458,53 @@ class ItemPickerDialog(QDialog):
         data = list_item.data(Qt.ItemDataRole.UserRole)
         if data:
             name, weight, notes = data
-            qty = self._qty.value()
-            self.items_chosen.emit([{"name": name, "qty": qty,
-                                     "weight": weight, "notes": notes}])
-            self.accept()
+            self._add_to_cart(name, weight, notes, qty=1)
 
-    def _on_add(self):
-        data = self._current_item()
+    def _on_add_to_cart(self):
+        data = self._current_item_data()
         if not data:
             return
         name, weight, notes = data
-        qty = self._qty.value()
-        self.items_chosen.emit([{"name": name, "qty": qty,
-                                 "weight": weight, "notes": notes}])
+        self._add_to_cart(name, weight, notes, qty=self._qty.value())
+        self._qty.setValue(1)
+
+    def _add_to_cart(self, name: str, weight: float, notes: str, qty: int):
+        # If the item is already in the cart, just bump its qty
+        for row in self._cart_rows:
+            if row._name == name:
+                row._qty_spin.setValue(row._qty_spin.value() + qty)
+                self._refresh_cart_state()
+                return
+
+        row = CartRow(name, weight, notes, qty)
+        row.remove_requested.connect(self._remove_cart_row)
+        self._cart_rows.append(row)
+        # Insert before the trailing stretch
+        self._cart_layout.insertWidget(self._cart_layout.count() - 1, row)
+        self._refresh_cart_state()
+
+    def _remove_cart_row(self, row: CartRow):
+        self._cart_layout.removeWidget(row)
+        row.deleteLater()
+        self._cart_rows.remove(row)
+        self._refresh_cart_state()
+
+    def _refresh_cart_state(self):
+        n = len(self._cart_rows)
+        self._empty_lbl.setVisible(n == 0)
+        self._save_btn.setEnabled(n > 0)
+        if n == 0:
+            self._count_lbl.setText("Nothing selected yet")
+        else:
+            total = sum(r.to_dict()["qty"] * r._weight for r in self._cart_rows)
+            self._count_lbl.setText(
+                f"{n} item type{'s' if n != 1 else ''}  ·  {total:.1f} lb total"
+            )
+
+    # ── Save ──────────────────────────────────────────────────────────────────
+
+    def _on_save(self):
+        if not self._cart_rows:
+            return
+        self.items_chosen.emit([r.to_dict() for r in self._cart_rows])
         self.accept()
