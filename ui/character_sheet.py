@@ -621,6 +621,7 @@ class CharacterSheetWindow(QMainWindow):
 
     def _open_features_editor(self):
         dlg = FeaturesEditor(
+            char_data=self._char_data,
             existing=self._char_data.get("features"),
             parent=self,
         )

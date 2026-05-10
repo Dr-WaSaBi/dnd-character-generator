@@ -13,6 +13,7 @@ from ui.styles import (
     COLOR_GOLD_RULE,
     FONT_HEADER, FONT_BODY,
 )
+from ui.editors.features_data import CLASS_FEATURES, RACE_TRAITS, BACKGROUND_FEATURES
 
 
 def _lbl(text, color, family, size, bold=False, italic=False,
@@ -110,8 +111,9 @@ class FeatureCard(QWidget):
 class FeaturesEditor(QDialog):
     data_saved = pyqtSignal(dict)
 
-    def __init__(self, existing: dict | None = None, parent=None):
+    def __init__(self, char_data: dict | None = None, existing: dict | None = None, parent=None):
         super().__init__(parent)
+        self._char_data = char_data or {}
         self.setWindowTitle("Section ⑨  —  Features & Traits")
         self.setMinimumSize(560, 580)
         self.setModal(True)
@@ -153,6 +155,10 @@ class FeaturesEditor(QDialog):
         for feat in data.get("features", []):
             self._add_card(feat)
 
+        # Button row: Add manually + Load from Class & Race
+        btn_add_row = QHBoxLayout()
+        btn_add_row.setSpacing(8)
+
         add_btn = QPushButton("＋  Add Feature / Trait")
         add_btn.setFixedHeight(32)
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -163,7 +169,26 @@ class FeaturesEditor(QDialog):
             f"QPushButton:hover{{background:{COLOR_PARCHMENT_HOVER};}}"
         )
         add_btn.clicked.connect(lambda: self._add_card())
-        root.addWidget(add_btn)
+        btn_add_row.addWidget(add_btn, 1)
+
+        load_btn = QPushButton("⚙  Load from Class & Race")
+        load_btn.setFixedHeight(32)
+        load_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        load_btn.setStyleSheet(
+            f"QPushButton{{background:{COLOR_BADGE_BG};color:{COLOR_BADGE_TEXT};"
+            f"border:2px solid {COLOR_GOLD_RULE};border-radius:5px;"
+            f"font-family:{FONT_BODY};font-size:10pt;font-weight:bold;padding:0 14px;}}"
+            f"QPushButton:hover{{background:#A02020;}}"
+        )
+        load_btn.clicked.connect(self._load_from_class_race)
+        btn_add_row.addWidget(load_btn)
+
+        root.addLayout(btn_add_row)
+
+        # Status label for feedback after auto-load
+        self._status_lbl = _lbl("", COLOR_TEXT_SUBTEXT, FONT_BODY, 9, italic=True,
+                                  align=Qt.AlignmentFlag.AlignCenter)
+        root.addWidget(self._status_lbl)
 
         root.addWidget(_rule())
 
@@ -187,6 +212,40 @@ class FeaturesEditor(QDialog):
         self._inner_lo.removeWidget(card)
         card.deleteLater()
         self._cards.remove(card)
+
+    def _load_from_class_race(self):
+        info = self._char_data.get("character_info", {})
+        cls        = info.get("class", "")
+        race       = info.get("race", "")
+        background = info.get("background", "")
+        level      = info.get("level", 1) or 1
+
+        existing_names = {c.to_dict()["name"] for c in self._cards}
+        added = 0
+
+        # Class features up to current level
+        for feat_level, feat_name, feat_desc in CLASS_FEATURES.get(cls, []):
+            if feat_level <= level and feat_name not in existing_names:
+                self._add_card({"name": feat_name, "description": feat_desc})
+                existing_names.add(feat_name)
+                added += 1
+
+        # Racial traits
+        for trait_name, trait_desc in RACE_TRAITS.get(race, []):
+            if trait_name not in existing_names:
+                self._add_card({"name": trait_name, "description": trait_desc})
+                existing_names.add(trait_name)
+                added += 1
+
+        # Background feature
+        bg_entry = BACKGROUND_FEATURES.get(background)
+        if bg_entry:
+            feat_name, feat_desc = bg_entry
+            if feat_name not in existing_names:
+                self._add_card({"name": feat_name, "description": feat_desc})
+                added += 1
+
+        self._status_lbl.setText(f"Added {added} feature{'s' if added != 1 else ''}.")
 
     def _on_save(self):
         features = [c.to_dict() for c in self._cards if c.to_dict()["name"]]
