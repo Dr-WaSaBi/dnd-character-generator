@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QKeySequence
 
-from ui.editors import AbilityScoreEditor, CharacterInfoEditor
+from ui.editors import AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor
 from ui.styles import (
     COLOR_PARCHMENT, COLOR_PARCHMENT_DARK, COLOR_PARCHMENT_HOVER,
     COLOR_SECTION_BORDER, COLOR_SECTION_BORDER_HOVER,
@@ -396,6 +396,8 @@ class CharacterSheetWindow(QMainWindow):
             self._on_info_saved(info)
         if scores := self._char_data.get("ability_scores"):
             self._on_scores_saved(scores)
+        if throws := self._char_data.get("saving_throws"):
+            self._on_throws_saved(throws)
 
     def _make_sheet_title(self):
         container = QWidget()
@@ -436,6 +438,9 @@ class CharacterSheetWindow(QMainWindow):
         if number == 2:
             self._open_ability_editor()
             return
+        if number == 3:
+            self._open_saving_throws_editor()
+            return
         self.statusBar().showMessage(
             f"  ▶  Section {number}: {title}   —   editor coming soon"
         )
@@ -475,6 +480,33 @@ class CharacterSheetWindow(QMainWindow):
         if preview:
             self._sections[1].set_preview(preview)
         self.statusBar().showMessage("  ✔  Character info saved.")
+
+    def _open_saving_throws_editor(self):
+        dlg = SavingThrowEditor(
+            char_data=self._char_data,
+            existing=self._char_data.get("saving_throws"),
+            parent=self,
+        )
+        dlg.throws_saved.connect(self._on_throws_saved)
+        dlg.exec()
+
+    def _on_throws_saved(self, throws: dict):
+        self._char_data["saving_throws"] = throws
+        from ui.editors.saving_throws import _fmt, _mod, _prof_bonus, FULL_NAMES
+        scores = self._char_data.get("ability_scores", {})
+        info   = self._char_data.get("character_info", {})
+        pb     = _prof_bonus(info.get("level", 1))
+        parts  = []
+        for ab in ["STR", "DEX", "CON", "INT", "WIS", "CHA"]:
+            score = scores.get(ab)
+            prof  = throws.get(ab, False)
+            if score is not None:
+                total = _mod(score) + (pb if prof else 0)
+                marker = "★" if prof else " "
+                parts.append(f"{marker}{ab} {_fmt(total)}")
+        preview = "  ".join(parts) if parts else "Toggle proficiencies above to set saves."
+        self._sections[3].set_preview(preview)
+        self.statusBar().showMessage("  ✔  Saving throws saved.")
 
     def _open_ability_editor(self):
         dlg = AbilityScoreEditor(
