@@ -215,20 +215,18 @@ class CombatStatsEditor(QDialog):
         calc_spd = RACE_SPEED.get(race, DEFAULT_SPEED)
         ac_hint  = f"Base: {10 + (_mod(dex) if dex is not None else 0)} (10 + DEX mod)"
 
-        if existing:
-            d = existing
-        else:
-            d = {
-                "ac":            10 + (_mod(dex) if dex is not None else 0),
-                "initiative":    calc_ini,
-                "speed":         calc_spd,
-                "max_hp":        calc_hp or 0,
-                "current_hp":    calc_hp or 0,
-                "temp_hp":       0,
-                "hit_dice_used": 0,
-                "death_successes": 0,
-                "death_failures":  0,
-            }
+        defaults = {
+            "ac":              10 + (_mod(dex) if dex is not None else 0),
+            "initiative":      calc_ini,
+            "speed":           calc_spd,
+            "max_hp":          calc_hp or 0,
+            "current_hp":      calc_hp or 0,
+            "temp_hp":         0,
+            "hit_dice_used":   0,
+            "death_successes": 0,
+            "death_failures":  0,
+        }
+        d = {**defaults, **(existing or {})}
 
         self._die     = die
         self._calc_hp = calc_hp
