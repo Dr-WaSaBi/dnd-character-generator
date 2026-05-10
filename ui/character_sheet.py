@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QKeySequence
 
-from ui.editors import AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor
+from ui.editors import AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor, SkillsEditor
 from ui.styles import (
     COLOR_PARCHMENT, COLOR_PARCHMENT_DARK, COLOR_PARCHMENT_HOVER,
     COLOR_SECTION_BORDER, COLOR_SECTION_BORDER_HOVER,
@@ -398,6 +398,8 @@ class CharacterSheetWindow(QMainWindow):
             self._on_scores_saved(scores)
         if throws := self._char_data.get("saving_throws"):
             self._on_throws_saved(throws)
+        if skills := self._char_data.get("skills"):
+            self._on_skills_saved(skills)
 
     def _make_sheet_title(self):
         container = QWidget()
@@ -440,6 +442,9 @@ class CharacterSheetWindow(QMainWindow):
             return
         if number == 3:
             self._open_saving_throws_editor()
+            return
+        if number == 4:
+            self._open_skills_editor()
             return
         self.statusBar().showMessage(
             f"  ▶  Section {number}: {title}   —   editor coming soon"
@@ -507,6 +512,32 @@ class CharacterSheetWindow(QMainWindow):
         preview = "  ".join(parts) if parts else "Toggle proficiencies above to set saves."
         self._sections[3].set_preview(preview)
         self.statusBar().showMessage("  ✔  Saving throws saved.")
+
+    def _open_skills_editor(self):
+        dlg = SkillsEditor(
+            char_data=self._char_data,
+            existing=self._char_data.get("skills"),
+            parent=self,
+        )
+        dlg.skills_saved.connect(self._on_skills_saved)
+        dlg.exec()
+
+    def _on_skills_saved(self, skills: dict):
+        self._char_data["skills"] = skills
+        from ui.editors.skills import SKILLS, _fmt, _mod, _prof_bonus
+        scores = self._char_data.get("ability_scores", {})
+        info   = self._char_data.get("character_info", {})
+        pb     = _prof_bonus(info.get("level", 1))
+        trained = [
+            s for s, ab in SKILLS
+            if skills.get(s) and scores.get(ab) is not None
+        ]
+        if trained:
+            preview = "  ·  ".join(trained)
+        else:
+            preview = "No skills selected."
+        self._sections[4].set_preview(preview)
+        self.statusBar().showMessage("  ✔  Skills saved.")
 
     def _open_ability_editor(self):
         dlg = AbilityScoreEditor(
