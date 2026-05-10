@@ -1,5 +1,6 @@
 import json
 import os
+import traceback
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -387,7 +388,10 @@ class CharacterSheetWindow(QMainWindow):
             self.setWindowTitle(f"D&D 5e — {os.path.basename(path)}")
             self.statusBar().showMessage(f"  Opened: {os.path.basename(path)}")
         except Exception as exc:
-            QMessageBox.critical(self, "Open failed", str(exc))
+            QMessageBox.critical(
+                self, "Open failed",
+                f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}"
+            )
 
     def _on_save(self):
         if self._current_file:
@@ -442,26 +446,32 @@ class CharacterSheetWindow(QMainWindow):
             section.set_preview(description)
 
     def _apply_loaded_data(self):
-        if info := self._char_data.get("character_info"):
-            self._on_info_saved(info)
-        if scores := self._char_data.get("ability_scores"):
-            self._on_scores_saved(scores)
-        if throws := self._char_data.get("saving_throws"):
-            self._on_throws_saved(throws)
-        if skills := self._char_data.get("skills"):
-            self._on_skills_saved(skills)
-        if stats := self._char_data.get("combat_stats"):
-            self._on_combat_stats_saved(stats)
-        if as_data := self._char_data.get("attacks_spells"):
-            self._on_attacks_spells_saved(as_data)
-        if equip := self._char_data.get("equipment"):
-            self._on_equipment_saved(equip)
-        if pers := self._char_data.get("personality"):
-            self._on_personality_saved(pers)
-        if feats := self._char_data.get("features"):
-            self._on_features_saved(feats)
-        if profs := self._char_data.get("proficiencies"):
-            self._on_proficiencies_saved(profs)
+        steps = [
+            ("character_info",  self._on_info_saved),
+            ("ability_scores",  self._on_scores_saved),
+            ("saving_throws",   self._on_throws_saved),
+            ("skills",          self._on_skills_saved),
+            ("combat_stats",    self._on_combat_stats_saved),
+            ("attacks_spells",  self._on_attacks_spells_saved),
+            ("equipment",       self._on_equipment_saved),
+            ("personality",     self._on_personality_saved),
+            ("features",        self._on_features_saved),
+            ("proficiencies",   self._on_proficiencies_saved),
+        ]
+        errors = []
+        for key, handler in steps:
+            data = self._char_data.get(key)
+            if not data:
+                continue
+            try:
+                handler(data)
+            except Exception:
+                errors.append(f"  • {key}: {traceback.format_exc().splitlines()[-1]}")
+        if errors:
+            QMessageBox.warning(
+                self, "Load warnings",
+                "Some sections could not be restored:\n\n" + "\n".join(errors)
+            )
 
     def _make_sheet_title(self):
         container = QWidget()
