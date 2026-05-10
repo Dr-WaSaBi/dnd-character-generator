@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
-from ui.editors import AbilityScoreEditor
+from ui.editors import AbilityScoreEditor, CharacterInfoEditor
 from ui.styles import (
     COLOR_PARCHMENT, COLOR_PARCHMENT_DARK, COLOR_PARCHMENT_HOVER,
     COLOR_SECTION_BORDER, COLOR_SECTION_BORDER_HOVER,
@@ -309,12 +309,51 @@ class CharacterSheetWindow(QMainWindow):
         return section
 
     def _on_section_clicked(self, number: int, title: str):
+        if number == 1:
+            self._open_info_editor()
+            return
         if number == 2:
             self._open_ability_editor()
             return
         self.statusBar().showMessage(
             f"  ▶  Section {number}: {title}   —   editor coming soon"
         )
+
+    def _open_info_editor(self):
+        dlg = CharacterInfoEditor(
+            existing=self._char_data.get("character_info"),
+            parent=self,
+        )
+        dlg.info_saved.connect(self._on_info_saved)
+        dlg.exec()
+
+    def _on_info_saved(self, info: dict):
+        self._char_data["character_info"] = info
+        parts = []
+        if info.get("character_name"):
+            parts.append(info["character_name"])
+        cls_level = " ".join(filter(None, [info.get("class"), str(info["level"]) if info.get("class") else ""]))
+        if cls_level:
+            parts.append(cls_level)
+        if info.get("race"):
+            parts.append(info["race"])
+        if info.get("background"):
+            parts.append(info["background"])
+        line1 = "  ·  ".join(parts) if parts else ""
+
+        parts2 = []
+        if info.get("alignment"):
+            parts2.append(info["alignment"])
+        if info.get("xp") is not None:
+            parts2.append(f"{info['xp']:,} XP")
+        if info.get("player_name"):
+            parts2.append(f"Player: {info['player_name']}")
+        line2 = "  ·  ".join(parts2) if parts2 else ""
+
+        preview = "\n".join(filter(None, [line1, line2]))
+        if preview:
+            self._sections[1].set_preview(preview)
+        self.statusBar().showMessage("  ✔  Character info saved.")
 
     def _open_ability_editor(self):
         dlg = AbilityScoreEditor(
