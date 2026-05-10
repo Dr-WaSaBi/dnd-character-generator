@@ -9,7 +9,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QKeySequence
 
-from ui.editors import AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor, SkillsEditor, CombatStatsEditor, AttacksSpellsEditor, EquipmentEditor
+from ui.editors import (
+    AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor,
+    SkillsEditor, CombatStatsEditor, AttacksSpellsEditor,
+    EquipmentEditor, PersonalityEditor, FeaturesEditor, ProficienciesEditor,
+)
 from ui.styles import (
     COLOR_PARCHMENT, COLOR_PARCHMENT_DARK, COLOR_PARCHMENT_HOVER,
     COLOR_SECTION_BORDER, COLOR_SECTION_BORDER_HOVER,
@@ -406,6 +410,12 @@ class CharacterSheetWindow(QMainWindow):
             self._on_attacks_spells_saved(as_data)
         if equip := self._char_data.get("equipment"):
             self._on_equipment_saved(equip)
+        if pers := self._char_data.get("personality"):
+            self._on_personality_saved(pers)
+        if feats := self._char_data.get("features"):
+            self._on_features_saved(feats)
+        if profs := self._char_data.get("proficiencies"):
+            self._on_proficiencies_saved(profs)
 
     def _make_sheet_title(self):
         container = QWidget()
@@ -460,6 +470,15 @@ class CharacterSheetWindow(QMainWindow):
             return
         if number == 7:
             self._open_equipment_editor()
+            return
+        if number == 8:
+            self._open_personality_editor()
+            return
+        if number == 9:
+            self._open_features_editor()
+            return
+        if number == 10:
+            self._open_proficiencies_editor()
             return
         self.statusBar().showMessage(
             f"  ▶  Section {number}: {title}   —   editor coming soon"
@@ -527,6 +546,74 @@ class CharacterSheetWindow(QMainWindow):
         preview = "  ".join(parts) if parts else "Toggle proficiencies above to set saves."
         self._sections[3].set_preview(preview)
         self.statusBar().showMessage("  ✔  Saving throws saved.")
+
+    def _open_personality_editor(self):
+        dlg = PersonalityEditor(
+            existing=self._char_data.get("personality"),
+            parent=self,
+        )
+        dlg.data_saved.connect(self._on_personality_saved)
+        dlg.exec()
+
+    def _on_personality_saved(self, data: dict):
+        self._char_data["personality"] = data
+        parts = []
+        for key, label in [
+            ("personality_traits", "Traits"),
+            ("ideals", "Ideals"),
+            ("bonds", "Bonds"),
+            ("flaws", "Flaws"),
+        ]:
+            if data.get(key):
+                first_line = data[key].splitlines()[0][:50]
+                parts.append(f"{label}: {first_line}{'…' if len(data[key]) > 50 else ''}")
+        self._sections[8].set_preview("\n".join(parts) if parts else "No personality details set.")
+        self.statusBar().showMessage("  ✔  Personality saved.")
+
+    def _open_features_editor(self):
+        dlg = FeaturesEditor(
+            existing=self._char_data.get("features"),
+            parent=self,
+        )
+        dlg.data_saved.connect(self._on_features_saved)
+        dlg.exec()
+
+    def _on_features_saved(self, data: dict):
+        self._char_data["features"] = data
+        features = data.get("features", [])
+        if features:
+            preview = "  ·  ".join(f["name"] for f in features[:5])
+            if len(features) > 5:
+                preview += f"  +{len(features)-5} more"
+        else:
+            preview = "No features added yet."
+        self._sections[9].set_preview(preview)
+        self.statusBar().showMessage("  ✔  Features & traits saved.")
+
+    def _open_proficiencies_editor(self):
+        dlg = ProficienciesEditor(
+            char_data=self._char_data,
+            existing=self._char_data.get("proficiencies"),
+            parent=self,
+        )
+        dlg.data_saved.connect(self._on_proficiencies_saved)
+        dlg.exec()
+
+    def _on_proficiencies_saved(self, data: dict):
+        self._char_data["proficiencies"] = data
+        lines = []
+        armor   = data.get("armor", [])
+        weapons = data.get("weapons", [])
+        tools   = data.get("tools", [])
+        langs   = data.get("languages", [])
+        if armor or weapons:
+            lines.append("  ·  ".join(armor + weapons))
+        if tools:
+            lines.append("Tools: " + "  ·  ".join(tools))
+        if langs:
+            lines.append("Languages: " + "  ·  ".join(langs))
+        self._sections[10].set_preview("\n".join(lines) if lines else "No proficiencies set.")
+        self.statusBar().showMessage("  ✔  Proficiencies & languages saved.")
 
     def _open_equipment_editor(self):
         dlg = EquipmentEditor(
