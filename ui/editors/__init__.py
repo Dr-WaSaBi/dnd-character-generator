@@ -3,3 +3,4 @@ from .character_info import CharacterInfoEditor
 from .saving_throws import SavingThrowEditor
 from .skills import SkillsEditor
 from .combat_stats import CombatStatsEditor
+from .attacks_spells import AttacksSpellsEditor

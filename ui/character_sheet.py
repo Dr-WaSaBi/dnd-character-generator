@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QKeySequence
 
-from ui.editors import AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor, SkillsEditor, CombatStatsEditor
+from ui.editors import AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor, SkillsEditor, CombatStatsEditor, AttacksSpellsEditor
 from ui.styles import (
     COLOR_PARCHMENT, COLOR_PARCHMENT_DARK, COLOR_PARCHMENT_HOVER,
     COLOR_SECTION_BORDER, COLOR_SECTION_BORDER_HOVER,
@@ -402,6 +402,8 @@ class CharacterSheetWindow(QMainWindow):
             self._on_skills_saved(skills)
         if stats := self._char_data.get("combat_stats"):
             self._on_combat_stats_saved(stats)
+        if as_data := self._char_data.get("attacks_spells"):
+            self._on_attacks_spells_saved(as_data)
 
     def _make_sheet_title(self):
         container = QWidget()
@@ -450,6 +452,9 @@ class CharacterSheetWindow(QMainWindow):
             return
         if number == 5:
             self._open_combat_stats_editor()
+            return
+        if number == 6:
+            self._open_attacks_spells_editor()
             return
         self.statusBar().showMessage(
             f"  ▶  Section {number}: {title}   —   editor coming soon"
@@ -517,6 +522,41 @@ class CharacterSheetWindow(QMainWindow):
         preview = "  ".join(parts) if parts else "Toggle proficiencies above to set saves."
         self._sections[3].set_preview(preview)
         self.statusBar().showMessage("  ✔  Saving throws saved.")
+
+    def _open_attacks_spells_editor(self):
+        dlg = AttacksSpellsEditor(
+            char_data=self._char_data,
+            existing=self._char_data.get("attacks_spells"),
+            parent=self,
+        )
+        dlg.data_saved.connect(self._on_attacks_spells_saved)
+        dlg.exec()
+
+    def _on_attacks_spells_saved(self, data: dict):
+        self._char_data["attacks_spells"] = data
+        attacks = data.get("attacks", [])
+        lines = []
+        if attacks:
+            lines.append("  ·  ".join(
+                f"{a['name']} {a.get('attack_bonus','')} {a.get('damage','')}".strip()
+                for a in attacks[:3]
+            ) + ("  …" if len(attacks) > 3 else ""))
+        sp_atk = data.get("spell_atk_bonus")
+        sp_dc  = data.get("spell_save_dc")
+        if sp_atk is not None:
+            sign = "+" if sp_atk >= 0 else ""
+            lines.append(f"Spell Attack {sign}{sp_atk}  ·  Save DC {sp_dc}")
+        slots = data.get("spell_slots_max", [])
+        used  = data.get("spell_slots_used", [])
+        slot_parts = []
+        for i, mx in enumerate(slots):
+            if mx:
+                rem = mx - (used[i] if i < len(used) else 0)
+                slot_parts.append(f"{i+1}▸{rem}/{mx}")
+        if slot_parts:
+            lines.append("Slots: " + "  ".join(slot_parts))
+        self._sections[6].set_preview("\n".join(lines) if lines else "No attacks or spells set.")
+        self.statusBar().showMessage("  ✔  Attacks & spellcasting saved.")
 
     def _open_combat_stats_editor(self):
         dlg = CombatStatsEditor(
