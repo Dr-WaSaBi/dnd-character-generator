@@ -13,6 +13,7 @@ from ui.editors import (
     AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor,
     SkillsEditor, CombatStatsEditor, AttacksSpellsEditor,
     EquipmentEditor, PersonalityEditor, FeaturesEditor, ProficienciesEditor,
+    StartingEquipmentDialog,
 )
 from ui.styles import (
     COLOR_PARCHMENT, COLOR_PARCHMENT_DARK, COLOR_PARCHMENT_HOVER,
@@ -324,6 +325,12 @@ class CharacterSheetWindow(QMainWindow):
         act_save_as.triggered.connect(self._on_save_as)
         file_menu.addAction(act_save_as)
 
+        file_menu.addSeparator()
+
+        act_starting = QAction("Apply Starting Equipment…", self)
+        act_starting.triggered.connect(self._on_starting_equipment)
+        file_menu.addAction(act_starting)
+
     # ── File I/O ──────────────────────────────────────────────────────────────
 
     def _on_new(self):
@@ -334,6 +341,22 @@ class CharacterSheetWindow(QMainWindow):
         self._reset_sheet()
         self.setWindowTitle("D&D 5e Character Generator")
         self.statusBar().showMessage("  New character — select a section to begin.")
+
+    def _on_starting_equipment(self):
+        dlg = StartingEquipmentDialog(char_data=self._char_data, parent=self)
+        dlg.equipment_chosen.connect(self._apply_starting_equipment)
+        dlg.exec()
+
+    def _apply_starting_equipment(self, items: list, gold_gp: int):
+        equip = self._char_data.setdefault("equipment", {"items": [], "currency": {}})
+        equip.setdefault("items", [])
+        equip.setdefault("currency", {"CP": 0, "SP": 0, "EP": 0, "GP": 0, "PP": 0})
+        equip["items"].extend(items)
+        equip["currency"]["GP"] = equip["currency"].get("GP", 0) + gold_gp
+        self._on_equipment_saved(equip)
+        self.statusBar().showMessage(
+            f"  ✔  Starting equipment applied — {len(items)} items, {gold_gp} gp added."
+        )
 
     def _on_open(self):
         if self._char_data and not self._confirm_discard():

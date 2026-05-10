@@ -8,3 +8,4 @@ from .equipment import EquipmentEditor
 from .personality import PersonalityEditor
 from .features import FeaturesEditor
 from .proficiencies import ProficienciesEditor
+from .starting_equipment import StartingEquipmentDialog
