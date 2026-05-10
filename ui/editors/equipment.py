@@ -233,9 +233,6 @@ class EquipmentEditor(QDialog):
         scroll.setWidget(self._items_inner)
         root.addWidget(scroll, 1)
 
-        for item in self._existing.get("items", []):
-            self._add_item_row(item)
-
         # Add button + starting equipment button + weight total
         bottom_row = QHBoxLayout()
         add_btn = QPushButton("＋  Add Item")
@@ -267,6 +264,9 @@ class EquipmentEditor(QDialog):
                                   align=Qt.AlignmentFlag.AlignRight)
         bottom_row.addWidget(self._weight_lbl)
         root.addLayout(bottom_row)
+
+        for item in self._existing.get("items", []):
+            self._add_item_row(item)
 
         root.addWidget(_rule())
 
