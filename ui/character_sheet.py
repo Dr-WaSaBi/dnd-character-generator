@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QKeySequence
 
-from ui.editors import AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor, SkillsEditor, CombatStatsEditor, AttacksSpellsEditor
+from ui.editors import AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor, SkillsEditor, CombatStatsEditor, AttacksSpellsEditor, EquipmentEditor
 from ui.styles import (
     COLOR_PARCHMENT, COLOR_PARCHMENT_DARK, COLOR_PARCHMENT_HOVER,
     COLOR_SECTION_BORDER, COLOR_SECTION_BORDER_HOVER,
@@ -404,6 +404,8 @@ class CharacterSheetWindow(QMainWindow):
             self._on_combat_stats_saved(stats)
         if as_data := self._char_data.get("attacks_spells"):
             self._on_attacks_spells_saved(as_data)
+        if equip := self._char_data.get("equipment"):
+            self._on_equipment_saved(equip)
 
     def _make_sheet_title(self):
         container = QWidget()
@@ -455,6 +457,9 @@ class CharacterSheetWindow(QMainWindow):
             return
         if number == 6:
             self._open_attacks_spells_editor()
+            return
+        if number == 7:
+            self._open_equipment_editor()
             return
         self.statusBar().showMessage(
             f"  ▶  Section {number}: {title}   —   editor coming soon"
@@ -522,6 +527,33 @@ class CharacterSheetWindow(QMainWindow):
         preview = "  ".join(parts) if parts else "Toggle proficiencies above to set saves."
         self._sections[3].set_preview(preview)
         self.statusBar().showMessage("  ✔  Saving throws saved.")
+
+    def _open_equipment_editor(self):
+        dlg = EquipmentEditor(
+            existing=self._char_data.get("equipment"),
+            parent=self,
+        )
+        dlg.data_saved.connect(self._on_equipment_saved)
+        dlg.exec()
+
+    def _on_equipment_saved(self, data: dict):
+        self._char_data["equipment"] = data
+        items = data.get("items", [])
+        currency = data.get("currency", {})
+        lines = []
+        if items:
+            names = "  ·  ".join(
+                f"{i['name']}{' x'+str(i['qty']) if i['qty'] > 1 else ''}"
+                for i in items[:4]
+            ) + ("  …" if len(items) > 4 else "")
+            lines.append(names)
+        coin_parts = [
+            f"{v} {c}" for c, v in currency.items() if v > 0
+        ]
+        if coin_parts:
+            lines.append("  ·  ".join(coin_parts))
+        self._sections[7].set_preview("\n".join(lines) if lines else "No items or currency.")
+        self.statusBar().showMessage("  ✔  Equipment saved.")
 
     def _open_attacks_spells_editor(self):
         dlg = AttacksSpellsEditor(
