@@ -4,6 +4,8 @@ A desktop character sheet builder for Dungeons & Dragons 5th Edition, built with
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![PyQt6](https://img.shields.io/badge/PyQt6-6.11%2B-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
+![Character Sheet Screenshot](assets/screenshot1.png)
+
 ---
 
 ## Features
