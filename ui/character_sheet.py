@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QKeySequence
 
-from ui.editors import AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor, SkillsEditor
+from ui.editors import AbilityScoreEditor, CharacterInfoEditor, SavingThrowEditor, SkillsEditor, CombatStatsEditor
 from ui.styles import (
     COLOR_PARCHMENT, COLOR_PARCHMENT_DARK, COLOR_PARCHMENT_HOVER,
     COLOR_SECTION_BORDER, COLOR_SECTION_BORDER_HOVER,
@@ -400,6 +400,8 @@ class CharacterSheetWindow(QMainWindow):
             self._on_throws_saved(throws)
         if skills := self._char_data.get("skills"):
             self._on_skills_saved(skills)
+        if stats := self._char_data.get("combat_stats"):
+            self._on_combat_stats_saved(stats)
 
     def _make_sheet_title(self):
         container = QWidget()
@@ -445,6 +447,9 @@ class CharacterSheetWindow(QMainWindow):
             return
         if number == 4:
             self._open_skills_editor()
+            return
+        if number == 5:
+            self._open_combat_stats_editor()
             return
         self.statusBar().showMessage(
             f"  ▶  Section {number}: {title}   —   editor coming soon"
@@ -512,6 +517,34 @@ class CharacterSheetWindow(QMainWindow):
         preview = "  ".join(parts) if parts else "Toggle proficiencies above to set saves."
         self._sections[3].set_preview(preview)
         self.statusBar().showMessage("  ✔  Saving throws saved.")
+
+    def _open_combat_stats_editor(self):
+        dlg = CombatStatsEditor(
+            char_data=self._char_data,
+            existing=self._char_data.get("combat_stats"),
+            parent=self,
+        )
+        dlg.stats_saved.connect(self._on_combat_stats_saved)
+        dlg.exec()
+
+    def _on_combat_stats_saved(self, stats: dict):
+        self._char_data["combat_stats"] = stats
+        die   = stats.get("hit_die", 8)
+        parts = [
+            f"AC {stats['ac']}",
+            f"Init {'+' if stats['initiative'] >= 0 else ''}{stats['initiative']}",
+            f"Speed {stats['speed']} ft",
+        ]
+        line1 = "  ·  ".join(parts)
+        hp_parts = [f"HP {stats['current_hp']}/{stats['max_hp']}"]
+        if stats.get("temp_hp"):
+            hp_parts.append(f"Temp {stats['temp_hp']}")
+        hd_total = self._char_data.get("character_info", {}).get("level", 1)
+        hd_used  = stats.get("hit_dice_used", 0)
+        hp_parts.append(f"HD d{die} ({hd_total - hd_used}/{hd_total})")
+        line2 = "  ·  ".join(hp_parts)
+        self._sections[5].set_preview(f"{line1}\n{line2}")
+        self.statusBar().showMessage("  ✔  Combat stats saved.")
 
     def _open_skills_editor(self):
         dlg = SkillsEditor(
