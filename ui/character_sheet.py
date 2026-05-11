@@ -333,6 +333,11 @@ class CharacterSheetWindow(QMainWindow):
         act_starting.triggered.connect(self._on_starting_equipment)
         file_menu.addAction(act_starting)
 
+        act_pdf = QAction("Export PDF…", self)
+        act_pdf.setShortcut(QKeySequence("Ctrl+P"))
+        act_pdf.triggered.connect(self._on_export_pdf)
+        file_menu.addAction(act_pdf)
+
         file_menu.addSeparator()
 
         act_quit = QAction("Quit", self)
@@ -420,6 +425,27 @@ class CharacterSheetWindow(QMainWindow):
             self.statusBar().showMessage(f"  ✔  Saved: {os.path.basename(path)}")
         except Exception as exc:
             QMessageBox.critical(self, "Save failed", str(exc))
+
+    def _on_export_pdf(self):
+        name = self._char_data.get("character_info", {}).get("name", "character") or "character"
+        default = name.replace(" ", "_") + ".pdf"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export PDF", default,
+            "PDF Files (*.pdf);;All Files (*)"
+        )
+        if not path:
+            return
+        if not path.endswith(".pdf"):
+            path += ".pdf"
+        try:
+            from ui.pdf_export import export_pdf
+            export_pdf(self._char_data, path)
+            self.statusBar().showMessage(f"  ✔  PDF exported: {os.path.basename(path)}")
+            QMessageBox.information(self, "PDF Exported",
+                f"Character sheet saved to:\n{path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "PDF Export Failed",
+                f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}")
 
     def _confirm_discard(self) -> bool:
         reply = QMessageBox.question(
