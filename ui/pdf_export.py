@@ -1,7 +1,5 @@
 """
-PDF export — generates a two-page D&D 5e character sheet.
-Page 1: core stats, combat, skills, attacks, equipment, personality
-Page 2: features & traits, proficiencies & languages
+PDF export — two-page D&D 5e character sheet via reportlab.
 """
 
 import os
@@ -9,24 +7,37 @@ from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas as rl_canvas
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 
 # ---------------------------------------------------------------------------
-# Palette — matches the parchment theme
+# Palette
 # ---------------------------------------------------------------------------
-C_PARCHMENT  = colors.HexColor("#F5E6C8")
-C_DARK       = colors.HexColor("#E8D5A0")
-C_BORDER     = colors.HexColor("#8B4513")
-C_HEADER     = colors.HexColor("#2C1810")
-C_TEXT       = colors.HexColor("#1A0A00")
-C_SUBTEXT    = colors.HexColor("#6B4226")
-C_GOLD       = colors.HexColor("#C8A84B")
-C_RED        = colors.HexColor("#8B0000")
-C_WHITE      = colors.white
+C_PARCHMENT = colors.HexColor("#F5E6C8")
+C_DARK      = colors.HexColor("#EAD8A8")
+C_BORDER    = colors.HexColor("#8B4513")
+C_HEADER    = colors.HexColor("#2C1810")
+C_TEXT      = colors.HexColor("#1A0A00")
+C_SUBTEXT   = colors.HexColor("#6B4226")
+C_GOLD      = colors.HexColor("#C8A84B")
+C_RED       = colors.HexColor("#8B0000")
+C_GREEN     = colors.HexColor("#1a6b1a")
+C_WHITE     = colors.white
 
 PW, PH = LETTER   # 612 × 792 pts
-MARGIN = 0.35 * inch
+
+# Margins & column layout (pts)
+M     = 0.30 * inch   # 21.6
+TOP_Y = PH - M - 98   # top of main content (below header)  ≈ 672
+
+C1_X = M               # ability scores
+C1_W = 72.0            # 1.0 inch
+
+C2_X = C1_X + C1_W + 4
+C2_W = 108.0           # 1.5 inch   (saves + skills)
+
+C3_X = C2_X + C2_W + 4
+C4_W = 126.0           # 1.75 inch  personality (right side)
+C4_X = PW - M - C4_W
+C3_W = C4_X - C3_X - 4
 
 
 # ---------------------------------------------------------------------------
@@ -36,59 +47,57 @@ def _mod(score: int) -> int:
     return (score - 10) // 2
 
 
-def _fmt_mod(val: int) -> str:
+def _fmt(val: int) -> str:
     return f"+{val}" if val >= 0 else str(val)
 
 
-def _wrap_text(text: str, max_chars: int) -> list[str]:
-    """Naive word-wrap to a list of lines."""
-    words = text.split()
+def _prof(level: int) -> int:
+    return (max(1, level) - 1) // 4 + 2
+
+
+def _wrap(text: str, max_chars: int) -> list[str]:
+    words = (text or "").split()
     lines, cur = [], ""
     for w in words:
         if cur and len(cur) + 1 + len(w) > max_chars:
             lines.append(cur)
             cur = w
         else:
-            cur = (cur + " " + w).strip() if cur else w
+            cur = (cur + " " + w).strip()
     if cur:
         lines.append(cur)
     return lines or [""]
 
 
 # ---------------------------------------------------------------------------
-# Low-level drawing primitives
+# Drawing primitives
 # ---------------------------------------------------------------------------
 class Sheet:
     def __init__(self, c: rl_canvas.Canvas):
         self.c = c
 
-    # ── background
-    def fill_bg(self):
+    def bg(self):
         self.c.setFillColor(C_PARCHMENT)
         self.c.rect(0, 0, PW, PH, fill=1, stroke=0)
 
-    # ── ruled box
-    def box(self, x, y, w, h, fill=None, stroke=C_BORDER, lw=0.8):
-        self.c.setStrokeColor(stroke)
-        self.c.setLineWidth(lw)
-        self.c.setFillColor(fill or C_PARCHMENT)
-        self.c.rect(x, y, w, h, fill=1 if fill else 0, stroke=1)
-
-    # ── rounded box
-    def rbox(self, x, y, w, h, r=4, fill=C_DARK, stroke=C_BORDER, lw=0.8):
+    def rbox(self, x, y, w, h, r=4, fill=C_DARK, stroke=C_BORDER, lw=0.7):
         self.c.setStrokeColor(stroke)
         self.c.setLineWidth(lw)
         self.c.setFillColor(fill)
         self.c.roundRect(x, y, w, h, r, fill=1, stroke=1)
 
-    # ── circle
-    def circle(self, cx, cy, r, fill=C_WHITE, stroke=C_BORDER, lw=0.8):
+    def box(self, x, y, w, h, fill=C_WHITE, stroke=C_BORDER, lw=0.7):
+        self.c.setStrokeColor(stroke)
+        self.c.setLineWidth(lw)
+        self.c.setFillColor(fill)
+        self.c.rect(x, y, w, h, fill=1, stroke=1)
+
+    def circle(self, cx, cy, r, fill=C_WHITE, stroke=C_BORDER, lw=0.7):
         self.c.setStrokeColor(stroke)
         self.c.setLineWidth(lw)
         self.c.setFillColor(fill)
         self.c.circle(cx, cy, r, fill=1, stroke=1)
 
-    # ── diamond (for AC)
     def diamond(self, cx, cy, hw, hh, fill=C_WHITE, stroke=C_BORDER, lw=1.0):
         p = self.c.beginPath()
         p.moveTo(cx, cy + hh)
@@ -101,49 +110,459 @@ class Sheet:
         self.c.setLineWidth(lw)
         self.c.drawPath(p, fill=1, stroke=1)
 
-    # ── horizontal rule
-    def hrule(self, x, y, w, color=C_GOLD, lw=1.0):
+    def rule(self, x, y, w, color=C_GOLD, lw=0.8):
         self.c.setStrokeColor(color)
         self.c.setLineWidth(lw)
         self.c.line(x, y, x + w, y)
 
-    # ── text helpers
-    def text(self, x, y, s, size=8, color=C_TEXT, bold=False, align="left"):
+    def txt(self, x, y, s, size=8, color=C_TEXT, bold=False, align="left"):
         self.c.setFillColor(color)
-        fn = "Helvetica-Bold" if bold else "Helvetica"
-        self.c.setFont(fn, size)
+        self.c.setFont("Helvetica-Bold" if bold else "Helvetica", size)
+        s = str(s)
         if align == "center":
-            self.c.drawCentredString(x, y, str(s))
+            self.c.drawCentredString(x, y, s)
         elif align == "right":
-            self.c.drawRightString(x, y, str(s))
+            self.c.drawRightString(x, y, s)
         else:
-            self.c.drawString(x, y, str(s))
-
-    def label_above(self, cx, y_bottom, lbl, size=6, color=C_SUBTEXT):
-        """Small label drawn above a field."""
-        self.text(cx, y_bottom, lbl, size=size, color=color, align="center")
-
-    def label_below(self, cx, y_top, lbl, size=6, color=C_SUBTEXT):
-        """Small label drawn below a field."""
-        self.text(cx, y_top - 7, lbl, size=size, color=color, align="center")
+            self.c.drawString(x, y, s)
 
 
-# ---------------------------------------------------------------------------
-# Section header banner
-# ---------------------------------------------------------------------------
-def _section_header(s: Sheet, x, y, w, title: str, h=13):
+def _sec_hdr(s: Sheet, x, y, w, title: str, h=12):
     s.c.setFillColor(C_RED)
     s.c.setStrokeColor(C_RED)
     s.c.roundRect(x, y, w, h, 3, fill=1, stroke=0)
-    s.text(x + w / 2, y + 3, title.upper(), size=7, color=C_WHITE,
-           bold=True, align="center")
+    s.txt(x + w / 2, y + 3, title.upper(), size=6.5,
+          color=C_WHITE, bold=True, align="center")
+    return y - 2   # return y just below the header
 
 
 # ---------------------------------------------------------------------------
-# Page 1
+# ABILITY SCORES  (column 1)
 # ---------------------------------------------------------------------------
-def _draw_page1(s: Sheet, d: dict):
-    s.fill_bg()
+ABILITY_ABBRS = ["STR", "DEX", "CON", "INT", "WIS", "CHA"]
+ABILITY_KEYS  = ["strength", "dexterity", "constitution",
+                 "intelligence", "wisdom", "charisma"]
+ABBR_TO_KEY   = dict(zip(ABILITY_ABBRS, ABILITY_KEYS))
+
+SAVE_ABBRS = ["STR", "DEX", "CON", "INT", "WIS", "CHA"]
+
+
+def _ability_col(s: Sheet, scores: dict, y_top: float) -> float:
+    """Draw ability score boxes. Returns y of bottom."""
+    _sec_hdr(s, C1_X, y_top, C1_W, "Ability Scores")
+    y = y_top - 2
+
+    BH = 42.0   # box height
+    GAP = 3.0
+
+    for i, (abbr, key) in enumerate(zip(ABILITY_ABBRS, ABILITY_KEYS)):
+        by = y - BH - GAP
+        score = scores.get(key, 10)
+        mod   = _mod(score)
+
+        s.box(C1_X, by, C1_W, BH, fill=C_WHITE)
+        # ability label at top
+        s.txt(C1_X + C1_W / 2, by + BH - 11, abbr,
+              size=7, bold=True, color=C_SUBTEXT, align="center")
+        # score (large)
+        s.txt(C1_X + C1_W / 2, by + BH - 24, str(score),
+              size=14, bold=True, color=C_HEADER, align="center")
+        # modifier circle at bottom
+        s.circle(C1_X + C1_W / 2, by + 9, 8, fill=C_PARCHMENT)
+        s.txt(C1_X + C1_W / 2, by + 6, _fmt(mod),
+              size=8, bold=True, color=C_HEADER, align="center")
+
+        y = by
+
+    return y   # bottom of last box
+
+
+# ---------------------------------------------------------------------------
+# SAVES + INSPIRATION + PROF BONUS  (column 2 top)
+# ---------------------------------------------------------------------------
+def _saves_col(s: Sheet, throws: dict, scores: dict,
+               prof_bonus: int, y_top: float) -> float:
+    """Draw inspiration, prof bonus, saving throws. Returns y of bottom."""
+
+    # Inspiration
+    s.circle(C2_X + 8, y_top - 8, 5, fill=C_WHITE)
+    s.txt(C2_X + 16, y_top - 11, "Inspiration", size=7, color=C_TEXT)
+
+    # Proficiency Bonus
+    pb_y = y_top - 28
+    s.box(C2_X, pb_y, C2_W, 14, fill=C_WHITE)
+    s.txt(C2_X + C2_W / 2, pb_y + 4, _fmt(prof_bonus),
+          size=9, bold=True, color=C_HEADER, align="center")
+    s.txt(C2_X + C2_W / 2, pb_y - 8, "Proficiency Bonus",
+          size=6, color=C_SUBTEXT, align="center")
+
+    # Saving Throws
+    sv_top = pb_y - 20
+    _sec_hdr(s, C2_X, sv_top, C2_W, "Saving Throws")
+    y = sv_top - 2
+
+    for abbr, key in zip(SAVE_ABBRS, ABILITY_KEYS):
+        prof   = throws.get(abbr, False)
+        base   = _mod(scores.get(key, 10))
+        val    = base + (prof_bonus if prof else 0)
+        ry     = y - 10
+        s.circle(C2_X + 6, ry + 4, 3,
+                 fill=C_RED if prof else C_WHITE,
+                 stroke=C_RED if prof else C_BORDER)
+        s.txt(C2_X + 13, ry + 1, _fmt(val), size=7, color=C_TEXT)
+        s.txt(C2_X + 28, ry + 1, abbr, size=7, color=C_TEXT)
+        y = ry
+
+    # Passive Perception
+    wis_mod = _mod(scores.get("wisdom", 10))
+    pp      = 10 + wis_mod
+    pp_y    = y - 8
+    s.rbox(C2_X, pp_y, C2_W, 12, fill=C_DARK)
+    s.txt(C2_X + C2_W / 2, pp_y + 3, f"Passive Perception  {pp}",
+          size=6.5, bold=True, color=C_HEADER, align="center")
+
+    return pp_y
+
+
+# ---------------------------------------------------------------------------
+# SKILLS  (column 2 bottom half)
+# ---------------------------------------------------------------------------
+SKILLS = [
+    ("Acrobatics",      "DEX"),
+    ("Animal Handling", "WIS"),
+    ("Arcana",          "INT"),
+    ("Athletics",       "STR"),
+    ("Deception",       "CHA"),
+    ("History",         "INT"),
+    ("Insight",         "WIS"),
+    ("Intimidation",    "CHA"),
+    ("Investigation",   "INT"),
+    ("Medicine",        "WIS"),
+    ("Nature",          "INT"),
+    ("Perception",      "WIS"),
+    ("Performance",     "CHA"),
+    ("Persuasion",      "CHA"),
+    ("Religion",        "INT"),
+    ("Sleight of Hand", "DEX"),
+    ("Stealth",         "DEX"),
+    ("Survival",        "WIS"),
+]
+
+
+def _skills_col(s: Sheet, skills: dict, scores: dict,
+                prof_bonus: int, y_top: float) -> float:
+    sk_top = y_top - 12
+    _sec_hdr(s, C2_X, sk_top, C2_W, "Skills")
+    y = sk_top - 2
+
+    for name, abbr in SKILLS:
+        key  = ABBR_TO_KEY[abbr]
+        prof = skills.get(name, False)
+        base = _mod(scores.get(key, 10))
+        val  = base + (prof_bonus if prof else 0)
+        ry   = y - 9.8
+        s.circle(C2_X + 6, ry + 3.5, 3,
+                 fill=C_RED if prof else C_WHITE,
+                 stroke=C_RED if prof else C_BORDER)
+        s.txt(C2_X + 13, ry + 0.5, _fmt(val), size=6.5, color=C_TEXT)
+        s.txt(C2_X + 27, ry + 0.5, name, size=6.5, color=C_TEXT)
+        s.txt(C2_X + C2_W - 2, ry + 0.5, abbr, size=5.5,
+              color=C_SUBTEXT, align="right")
+        y = ry
+
+    return y
+
+
+# ---------------------------------------------------------------------------
+# COMBAT STATS  (column 3 top)
+# ---------------------------------------------------------------------------
+def _combat_col(s: Sheet, combat: dict, info: dict, y_top: float) -> float:
+    level  = info.get("level", 1) or 1
+    cls    = info.get("class", "")
+
+    try:
+        from ui.editors.combat_stats import HIT_DICE
+        die = HIT_DICE.get(cls, 8)
+    except Exception:
+        die = 8
+
+    ac      = combat.get("ac", 10)
+    ini     = combat.get("initiative", 0)
+    speed   = combat.get("speed", 30)
+    max_hp  = combat.get("max_hp", 0)
+    cur_hp  = combat.get("current_hp", max_hp)
+    tmp_hp  = combat.get("temp_hp", 0)
+    hd_used = combat.get("hit_dice_used", 0)
+    ds_s    = combat.get("death_successes", 0)
+    ds_f    = combat.get("death_failures", 0)
+    hd_left = level - hd_used
+
+    y = _sec_hdr(s, C3_X, y_top, C3_W, "Combat Stats")
+
+    # ── Row 1: AC  Initiative  Speed
+    R1H = 46.0
+    y -= R1H + 4
+    cw  = C3_W / 3 - 3
+
+    # AC diamond
+    acx = C3_X + cw / 2
+    s.diamond(acx, y + R1H / 2, cw / 2 - 3, R1H / 2 - 3, fill=C_WHITE)
+    s.txt(acx, y + R1H / 2 - 6, str(ac),
+          size=16, bold=True, color=C_HEADER, align="center")
+    s.txt(acx, y - 8, "Armor Class", size=6, color=C_SUBTEXT, align="center")
+
+    # Initiative circle
+    inx = C3_X + C3_W / 2
+    s.circle(inx, y + R1H / 2, R1H / 2 - 3, fill=C_WHITE)
+    s.txt(inx, y + R1H / 2 - 6, _fmt(ini),
+          size=14, bold=True, color=C_HEADER, align="center")
+    s.txt(inx, y - 8, "Initiative", size=6, color=C_SUBTEXT, align="center")
+
+    # Speed box
+    spx = C3_X + 2 * (cw + 3) + cw / 2
+    s.box(C3_X + 2 * (cw + 3), y, cw, R1H, fill=C_WHITE)
+    s.txt(spx, y + R1H / 2 - 6, f"{speed} ft",
+          size=12, bold=True, color=C_HEADER, align="center")
+    s.txt(spx, y - 8, "Speed", size=6, color=C_SUBTEXT, align="center")
+
+    # ── Row 2: Max HP
+    y -= 22
+    s.box(C3_X, y, C3_W, 32, fill=C_WHITE)
+    s.txt(C3_X + C3_W / 2, y + 10,
+          str(max_hp) if max_hp else "—",
+          size=16, bold=True, color=C_HEADER, align="center")
+    s.txt(C3_X + C3_W / 2, y + 34, "Hit Point Maximum",
+          size=6, color=C_SUBTEXT, align="center")
+
+    # ── Row 3: Current HP  |  Temp HP
+    y -= 46
+    lw = C3_W * 0.57 - 2
+    rw = C3_W - lw - 4
+    s.box(C3_X, y, lw, 32, fill=C_WHITE)
+    s.txt(C3_X + lw / 2, y + 10,
+          str(cur_hp) if max_hp else "—",
+          size=16, bold=True, color=C_HEADER, align="center")
+    s.txt(C3_X + lw / 2, y + 34, "Current Hit Points",
+          size=6, color=C_SUBTEXT, align="center")
+
+    tx = C3_X + lw + 4
+    s.box(tx, y, rw, 32, fill=C_WHITE)
+    s.txt(tx + rw / 2, y + 10, str(tmp_hp) or "—",
+          size=14, bold=True, color=C_SUBTEXT, align="center")
+    s.txt(tx + rw / 2, y + 34, "Temporary HP",
+          size=6, color=C_SUBTEXT, align="center")
+
+    # ── Row 4: Hit Dice  |  Death Saves
+    y -= 46
+    dw = C3_W * 0.42 - 2
+    sw = C3_W - dw - 4
+
+    s.box(C3_X, y, dw, 36, fill=C_WHITE)
+    s.txt(C3_X + dw / 2, y + 12, f"{hd_left}/{level}",
+          size=11, bold=True, color=C_TEXT, align="center")
+    s.txt(C3_X + dw / 2, y + 4, f"d{die}", size=8, color=C_SUBTEXT, align="center")
+    s.txt(C3_X + dw / 2, y + 38, "Hit Dice", size=6, color=C_SUBTEXT, align="center")
+
+    dsx = C3_X + dw + 4
+    s.box(dsx, y, sw, 36, fill=C_WHITE)
+    s.txt(dsx + sw / 2, y + 38, "Death Saves",
+          size=6, color=C_SUBTEXT, align="center")
+
+    def _ds_row(label, count, filled, ry, dot_color):
+        s.txt(dsx + 4, ry, label, size=6, color=C_TEXT)
+        for j in range(3):
+            fill = dot_color if j < filled else C_WHITE
+            s.circle(dsx + sw - 10 - j * 11, ry + 4, 4,
+                     fill=fill, stroke=dot_color)
+
+    _ds_row("Successes", 3, ds_s, y + 20, C_GREEN)
+    _ds_row("Failures",  3, ds_f, y + 6,  C_RED)
+
+    return y - 14
+
+
+# ---------------------------------------------------------------------------
+# ATTACKS & SPELLCASTING  (column 3 middle)
+# ---------------------------------------------------------------------------
+def _attacks_col(s: Sheet, attacks: dict, y_top: float) -> float:
+    y = _sec_hdr(s, C3_X, y_top, C3_W, "Attacks & Spellcasting")
+
+    atk_list = attacks.get("attacks", [])
+    spell_ab = attacks.get("spell_atk_bonus")
+    spell_dc = attacks.get("spell_save_dc")
+
+    # Column headers
+    cn = C3_X + 3
+    cb = C3_X + C3_W * 0.46
+    cd = C3_X + C3_W * 0.60
+    y -= 10
+    s.txt(cn, y, "Name",         size=6, color=C_SUBTEXT, bold=True)
+    s.txt(cb, y, "Atk Bonus",    size=6, color=C_SUBTEXT, bold=True)
+    s.txt(cd, y, "Damage / Type",size=6, color=C_SUBTEXT, bold=True)
+    y -= 2
+    s.rule(C3_X, y, C3_W, lw=0.5)
+
+    RH = 9.5
+    for i, atk in enumerate(atk_list[:8]):
+        ry = y - RH * (i + 1)
+        fill = C_DARK if i % 2 == 0 else C_WHITE
+        s.c.setFillColor(fill)
+        s.c.rect(C3_X, ry - 1, C3_W, RH, fill=1, stroke=0)
+        s.txt(cn, ry + 1.5, str(atk.get("name", ""))[:22], size=7, color=C_TEXT)
+        s.txt(cb, ry + 1.5, str(atk.get("attack_bonus", "")),size=7, color=C_TEXT)
+        dmg = f"{atk.get('damage', '')} {atk.get('damage_type', '')}".strip()
+        s.txt(cd, ry + 1.5, dmg[:22], size=7, color=C_TEXT)
+
+    y -= RH * (min(len(atk_list), 8) + 1) + 4
+
+    if spell_ab or spell_dc:
+        y -= 10
+        parts = []
+        if spell_ab:
+            parts.append(f"Spell Attack Bonus: {spell_ab}")
+        if spell_dc:
+            parts.append(f"Spell Save DC: {spell_dc}")
+        s.txt(C3_X + 3, y, "   ".join(parts), size=6.5, color=C_TEXT)
+
+    return y - 4
+
+
+# ---------------------------------------------------------------------------
+# EQUIPMENT  (column 3 bottom)
+# ---------------------------------------------------------------------------
+COIN_KEYS = [("CP", "CP"), ("SP", "SP"), ("EP", "EP"),
+             ("GP", "GP"), ("PP", "PP")]
+
+
+def _equipment_col(s: Sheet, equip: dict, y_top: float) -> float:
+    y = _sec_hdr(s, C3_X, y_top, C3_W, "Equipment & Currency")
+
+    currency = equip.get("currency", {})
+    items    = equip.get("items", [])
+
+    # Currency row
+    y -= 2
+    cw = C3_W / 5
+    for i, (label, key) in enumerate(COIN_KEYS):
+        cx  = C3_X + i * cw + cw / 2
+        val = currency.get(key, 0)
+        s.box(C3_X + i * cw, y - 12, cw - 2, 12, fill=C_WHITE)
+        s.txt(cx, y - 9, str(val), size=7, color=C_TEXT, align="center")
+        s.txt(cx, y - 22, label, size=6, color=C_SUBTEXT, align="center")
+
+    # Item list
+    y -= 28
+    RH = 9.0
+    for i, item in enumerate(items[:14]):
+        if y - RH < M + 14:
+            break
+        ry   = y - RH
+        fill = C_DARK if i % 2 == 0 else C_WHITE
+        s.c.setFillColor(fill)
+        s.c.rect(C3_X, ry, C3_W, RH, fill=1, stroke=0)
+        qty  = item.get("qty", item.get("quantity", 1))
+        name = str(item.get("name", ""))[:28]
+        eqp  = " ✦" if item.get("equipped") else ""
+        s.txt(C3_X + 3, ry + 1.5, f"{qty}× {name}{eqp}", size=7, color=C_TEXT)
+        y = ry
+
+    # Border around whole equipment section
+    total_h = y_top - y + 2
+    s.c.setStrokeColor(C_BORDER)
+    s.c.setLineWidth(0.5)
+    s.c.rect(C3_X, y - 2, C3_W, total_h, fill=0, stroke=1)
+
+    return y - 4
+
+
+# ---------------------------------------------------------------------------
+# PERSONALITY  (column 4)
+# ---------------------------------------------------------------------------
+PERS_FIELDS = [
+    ("Personality Traits", "traits"),
+    ("Ideals",             "ideals"),
+    ("Bonds",              "bonds"),
+    ("Flaws",              "flaws"),
+]
+
+
+def _personality_col(s: Sheet, pers: dict, y_top: float) -> float:
+    y = y_top
+    BOX_H = (y_top - M - 14) / 4 - 4   # divide available height into 4
+
+    for label, key in PERS_FIELDS:
+        bh = BOX_H
+        s.box(C4_X, y - bh, C4_W, bh, fill=C_WHITE)
+        # red label banner inside top of box
+        s.c.setFillColor(C_RED)
+        s.c.roundRect(C4_X, y - 12, C4_W, 12, 3, fill=1, stroke=0)
+        s.txt(C4_X + C4_W / 2, y - 9, label.upper(),
+              size=6, bold=True, color=C_WHITE, align="center")
+
+        text  = pers.get(key, "") or ""
+        lines = _wrap(text, 26)
+        for j, line in enumerate(lines[:5]):
+            s.txt(C4_X + 4, y - 16 - j * 9, line, size=7, color=C_TEXT)
+
+        y -= bh + 4
+
+    return y
+
+
+# ---------------------------------------------------------------------------
+# HEADER  (top of page)
+# ---------------------------------------------------------------------------
+def _header(s: Sheet, info: dict):
+    x   = M
+    w   = PW - 2 * M
+    top = PH - M
+
+    # Character name
+    name = info.get("character_name", "") or info.get("name", "") or "Unnamed Hero"
+    s.c.setFillColor(C_HEADER)
+    s.c.setFont("Helvetica-Bold", 20)
+    s.c.drawString(x, top - 18, name)
+    s.rule(x, top - 22, w, lw=1.5)
+
+    # Row 1: Class+Level, Background, Player Name
+    fields1 = [
+        ("Class & Level", f"{info.get('class', '')} {info.get('level', '')}".strip()),
+        ("Background",    info.get("background", "")),
+        ("Player Name",   info.get("player_name", "")),
+    ]
+    seg = w / 3
+    y1  = top - 37
+    for i, (lbl, val) in enumerate(fields1):
+        fx = x + i * seg
+        s.rbox(fx + 1, y1 - 13, seg - 4, 13, fill=C_DARK)
+        s.txt(fx + seg / 2, y1 - 10, str(val) or "—",
+              size=8, color=C_TEXT, align="center")
+        s.txt(fx + seg / 2, y1 - 22, lbl,
+              size=6, color=C_SUBTEXT, align="center")
+
+    # Row 2: Race, Alignment, XP
+    fields2 = [
+        ("Race",       info.get("race", "")),
+        ("Alignment",  info.get("alignment", "")),
+        ("Experience", f"{info.get('xp', 0) or 0} XP"),
+    ]
+    y2 = y1 - 28
+    for i, (lbl, val) in enumerate(fields2):
+        fx = x + i * seg
+        s.rbox(fx + 1, y2 - 13, seg - 4, 13, fill=C_DARK)
+        s.txt(fx + seg / 2, y2 - 10, str(val) or "—",
+              size=8, color=C_TEXT, align="center")
+        s.txt(fx + seg / 2, y2 - 22, lbl,
+              size=6, color=C_SUBTEXT, align="center")
+
+    s.rule(x, y2 - 28, w, lw=0.5)
+
+
+# ---------------------------------------------------------------------------
+# PAGE 1
+# ---------------------------------------------------------------------------
+def _page1(s: Sheet, d: dict):
+    s.bg()
 
     info    = d.get("character_info", {})
     scores  = d.get("ability_scores", {})
@@ -154,546 +573,108 @@ def _draw_page1(s: Sheet, d: dict):
     equip   = d.get("equipment", {})
     pers    = d.get("personality", {})
 
-    _header_block(s, info)
-    _ability_block(s, scores, throws)
-    _skills_block(s, skills, scores)
-    _combat_block(s, combat, info)
-    _attacks_block(s, attacks)
-    _equipment_block(s, equip)
-    _personality_block(s, pers, info)
+    level      = info.get("level", 1) or 1
+    prof_bonus = _prof(level)
 
-    # page footer
-    s.hrule(MARGIN, 0.22 * inch, PW - 2 * MARGIN, lw=0.5)
-    s.text(PW / 2, 0.10 * inch, "D&D 5e Character Sheet — Page 1",
-           size=6, color=C_SUBTEXT, align="center")
+    _header(s, info)
 
+    # Column 1 — ability scores
+    _ability_col(s, scores, TOP_Y)
 
-# ---------------------------------------------------------------------------
-# Header block  (top of page 1)
-# ---------------------------------------------------------------------------
-def _header_block(s: Sheet, info: dict):
-    TOP = PH - MARGIN
-    W   = PW - 2 * MARGIN
-    X   = MARGIN
+    # Column 2 — saves, skills
+    saves_bot = _saves_col(s, throws, scores, prof_bonus, TOP_Y)
+    _skills_col(s, skills, scores, prof_bonus, saves_bot)
 
-    # character name — big
-    name = info.get("name", "Unnamed Hero") or "Unnamed Hero"
-    s.c.setFillColor(C_HEADER)
-    s.c.setFont("Helvetica-Bold", 20)
-    s.c.drawString(X, TOP - 18, name)
+    # Column 3 — combat, attacks, equipment
+    combat_bot  = _combat_col(s, combat, info, TOP_Y)
+    attacks_bot = _attacks_col(s, attacks, combat_bot)
+    _equipment_col(s, equip, attacks_bot)
 
-    # decorative gold rule under name
-    s.hrule(X, TOP - 22, W, lw=1.5)
+    # Column 4 — personality
+    _personality_col(s, pers, TOP_Y)
 
-    # Info row 1
-    y1 = TOP - 36
-    fields1 = [
-        ("Class & Level", f"{info.get('class', '')} {info.get('level', '')}".strip()),
-        ("Background",    info.get("background", "")),
-        ("Player Name",   info.get("player_name", "")),
-    ]
-    seg = W / 3
-    for i, (lbl, val) in enumerate(fields1):
-        fx = X + i * seg
-        s.rbox(fx, y1 - 14, seg - 4, 14, fill=C_DARK)
-        s.text(fx + (seg - 4) / 2, y1 - 10, val or "—", size=8,
-               color=C_TEXT, align="center")
-        s.text(fx + (seg - 4) / 2, y1 - 22, lbl, size=6,
-               color=C_SUBTEXT, align="center")
-
-    # Info row 2
-    y2 = y1 - 28
-    fields2 = [
-        ("Race",        info.get("race", "")),
-        ("Alignment",   info.get("alignment", "")),
-        ("Experience",  str(info.get("experience_points", 0)) + " XP"),
-    ]
-    for i, (lbl, val) in enumerate(fields2):
-        fx = X + i * seg
-        s.rbox(fx, y2 - 14, seg - 4, 14, fill=C_DARK)
-        s.text(fx + (seg - 4) / 2, y2 - 10, val or "—", size=8,
-               color=C_TEXT, align="center")
-        s.text(fx + (seg - 4) / 2, y2 - 22, lbl, size=6,
-               color=C_SUBTEXT, align="center")
-
-    s.hrule(X, y2 - 28, W, lw=0.5)
+    # Footer
+    s.rule(M, M + 10, PW - 2 * M, lw=0.4)
+    s.txt(PW / 2, M + 3, "D&D 5e Character Sheet — Page 1",
+          size=6, color=C_SUBTEXT, align="center")
 
 
 # ---------------------------------------------------------------------------
-# Ability Scores + Saving Throws  (left column)
+# PAGE 2  — Features & Proficiencies
 # ---------------------------------------------------------------------------
-ABILITY_NAMES = ["STR", "DEX", "CON", "INT", "WIS", "CHA"]
-ABILITY_KEYS  = ["strength", "dexterity", "constitution",
-                 "intelligence", "wisdom", "charisma"]
+def _page2(s: Sheet, d: dict):
+    s.bg()
 
-SAVE_KEYS = ["strength_save", "dexterity_save", "constitution_save",
-             "intelligence_save", "wisdom_save", "charisma_save"]
-
-
-def _ability_block(s: Sheet, scores: dict, throws: dict):
-    X   = MARGIN
-    TOP = PH - MARGIN - 110     # below header block
-
-    COL_W = 0.70 * inch
-    BOX_H = 0.62 * inch
-
-    _section_header(s, X, TOP, COL_W * 2 + 4, "Ability Scores")
-
-    for i, (abbr, key) in enumerate(zip(ABILITY_NAMES, ABILITY_KEYS)):
-        row = i // 2
-        col = i % 2
-        bx = X + col * (COL_W + 4)
-        by = TOP - (row + 1) * (BOX_H + 4)
-
-        score = scores.get(key, 10)
-        mod   = _mod(score)
-
-        # outer box
-        s.rbox(bx, by, COL_W, BOX_H, fill=C_WHITE)
-        # big modifier circle
-        s.circle(bx + COL_W / 2, by + 14, 12, fill=C_PARCHMENT)
-        s.text(bx + COL_W / 2, by + 10, _fmt_mod(mod),
-               size=10, bold=True, color=C_HEADER, align="center")
-        # score number
-        s.text(bx + COL_W / 2, by + BOX_H - 14, str(score),
-               size=16, bold=True, color=C_TEXT, align="center")
-        # ability label
-        s.text(bx + COL_W / 2, by + BOX_H - 25, abbr,
-               size=7, bold=True, color=C_SUBTEXT, align="center")
-
-    # ── Saving Throws
-    sy_start = TOP - 3 * (BOX_H + 4) - 6
-    sav_w    = COL_W * 2 + 4
-
-    _section_header(s, X, sy_start, sav_w, "Saving Throws")
-
-    prof_bonus = _prof_bonus_from_throws(throws)
-
-    for i, (abbr, key) in enumerate(zip(ABILITY_NAMES, SAVE_KEYS)):
-        ry = sy_start - 11 - i * 10
-        td = throws.get(key, {})
-        prof = td.get("proficient", False)
-        val  = td.get("value", 0)
-
-        # dot
-        s.circle(X + 6, ry + 3, 3, fill=C_RED if prof else C_WHITE)
-        s.text(X + 13, ry, _fmt_mod(val), size=7, color=C_TEXT)
-        s.text(X + 30, ry, abbr, size=7, color=C_TEXT)
-
-    # Passive Perception
-    pp_y = sy_start - 11 - 6 * 10 - 4
-    wis_score = 0
-    for key, abbr in zip(ABILITY_KEYS, ABILITY_NAMES):
-        if abbr == "WIS":
-            wis_score = throws.get("wisdom_save", {}).get("value", _mod(scores.get("wisdom", 10)))
-            break
-    wis_mod = _mod(scores.get("wisdom", 10))
-    # try to get perception skill
-    pp = 10 + wis_mod
-    s.rbox(X, pp_y - 12, sav_w, 12, fill=C_DARK)
-    s.text(X + sav_w / 2, pp_y - 9, f"Passive Perception  {pp}",
-           size=7, color=C_TEXT, bold=True, align="center")
-
-    # Prof bonus
-    pb_y = pp_y - 22
-    s.rbox(X, pb_y - 14, sav_w, 14, fill=C_WHITE)
-    s.text(X + sav_w / 2, pb_y - 10, _fmt_mod(prof_bonus),
-           size=11, bold=True, color=C_HEADER, align="center")
-    s.text(X + sav_w / 2, pb_y - 20, "Proficiency Bonus",
-           size=6, color=C_SUBTEXT, align="center")
-
-    # Inspiration
-    insp_y = pb_y - 34
-    s.circle(X + 10, insp_y + 4, 5, fill=C_WHITE)
-    s.text(X + 20, insp_y, "Inspiration", size=7, color=C_TEXT)
-
-
-def _prof_bonus_from_throws(throws: dict) -> int:
-    for k, v in throws.items():
-        if isinstance(v, dict) and v.get("proficient"):
-            val   = v.get("value", 0)
-            base  = v.get("base_mod", 0)
-            bonus = val - base
-            if 2 <= bonus <= 6:
-                return bonus
-    return 2
-
-
-# ---------------------------------------------------------------------------
-# Skills  (middle-left column)
-# ---------------------------------------------------------------------------
-SKILLS = [
-    ("Acrobatics",       "dexterity",     "acrobatics"),
-    ("Animal Handling",  "wisdom",        "animal_handling"),
-    ("Arcana",           "intelligence",  "arcana"),
-    ("Athletics",        "strength",      "athletics"),
-    ("Deception",        "charisma",      "deception"),
-    ("History",          "intelligence",  "history"),
-    ("Insight",          "wisdom",        "insight"),
-    ("Intimidation",     "charisma",      "intimidation"),
-    ("Investigation",    "intelligence",  "investigation"),
-    ("Medicine",         "wisdom",        "medicine"),
-    ("Nature",           "intelligence",  "nature"),
-    ("Perception",       "wisdom",        "perception"),
-    ("Performance",      "charisma",      "performance"),
-    ("Persuasion",       "charisma",      "persuasion"),
-    ("Religion",         "intelligence",  "religion"),
-    ("Sleight of Hand",  "dexterity",     "sleight_of_hand"),
-    ("Stealth",          "dexterity",     "stealth"),
-    ("Survival",         "wisdom",        "survival"),
-]
-
-STAT_ABBR = {
-    "strength": "STR", "dexterity": "DEX", "constitution": "CON",
-    "intelligence": "INT", "wisdom": "WIS", "charisma": "CHA",
-}
-
-
-def _skills_block(s: Sheet, skills: dict, scores: dict):
-    # Position: right of ability block
-    X   = MARGIN + 1.50 * inch
-    TOP = PH - MARGIN - 110
-
-    W = 1.65 * inch
-    _section_header(s, X, TOP, W, "Skills")
-
-    for i, (name, stat, key) in enumerate(SKILLS):
-        ry   = TOP - 11 - i * 10.2
-        sk   = skills.get(key, {})
-        prof = sk.get("proficient", False)
-        exp  = sk.get("expertise", False)
-        val  = sk.get("value", _mod(scores.get(stat, 10)))
-        abbr = STAT_ABBR.get(stat, "")
-
-        fill = C_RED if prof else C_WHITE
-        if exp:
-            s.circle(X + 6, ry + 3, 3, fill=fill)
-            s.circle(X + 12, ry + 3, 3, fill=fill)
-        else:
-            s.circle(X + 6, ry + 3, 3, fill=fill)
-
-        s.text(X + 16, ry, _fmt_mod(val), size=6.5, color=C_TEXT)
-        s.text(X + 30, ry, name, size=6.5, color=C_TEXT)
-        s.text(X + W - 2, ry, abbr, size=5.5, color=C_SUBTEXT, align="right")
-
-
-# ---------------------------------------------------------------------------
-# Combat Stats  (right area, top)
-# ---------------------------------------------------------------------------
-def _combat_block(s: Sheet, combat: dict, info: dict):
-    X   = MARGIN + 3.30 * inch
-    TOP = PH - MARGIN - 110
-    W   = PW - X - MARGIN
-
-    ac      = combat.get("ac",           10)
-    ini     = combat.get("initiative",    0)
-    speed   = combat.get("speed",        30)
-    max_hp  = combat.get("max_hp",        0)
-    cur_hp  = combat.get("current_hp",   max_hp)
-    tmp_hp  = combat.get("temp_hp",       0)
-    hd_used = combat.get("hit_dice_used", 0)
-    ds_s    = combat.get("death_successes", 0)
-    ds_f    = combat.get("death_failures",  0)
-
-    level   = info.get("level", 1) or 1
-    cls     = info.get("class", "")
-
-    from ui.editors.combat_stats import HIT_DICE
-    die = HIT_DICE.get(cls, 8)
-
-    _section_header(s, X, TOP, W, "Combat")
-
-    cell_h = 0.50 * inch
-    cell_y = TOP - cell_h - 4
-
-    # AC diamond
-    cell_w = W / 3 - 4
-    acx = X + cell_w / 2 + 2
-    s.diamond(acx, cell_y + cell_h / 2, cell_w / 2 - 2, cell_h / 2 - 2,
-              fill=C_WHITE)
-    s.text(acx, cell_y + cell_h / 2 - 5, str(ac),
-           size=16, bold=True, color=C_HEADER, align="center")
-    s.text(acx, cell_y - 6, "Armor Class",
-           size=6, color=C_SUBTEXT, align="center")
-
-    # Initiative circle
-    inix = X + W / 2
-    s.circle(inix, cell_y + cell_h / 2, cell_h / 2 - 2, fill=C_WHITE)
-    s.text(inix, cell_y + cell_h / 2 - 5, _fmt_mod(ini),
-           size=14, bold=True, color=C_HEADER, align="center")
-    s.text(inix, cell_y - 6, "Initiative",
-           size=6, color=C_SUBTEXT, align="center")
-
-    # Speed box
-    spdx = X + W - cell_w / 2 - 2
-    s.rbox(X + 2 * (cell_w + 4), cell_y, cell_w, cell_h, fill=C_WHITE)
-    s.text(spdx, cell_y + cell_h / 2 - 5, f"{speed} ft",
-           size=11, bold=True, color=C_HEADER, align="center")
-    s.text(spdx, cell_y - 6, "Speed",
-           size=6, color=C_SUBTEXT, align="center")
-
-    # HP row
-    hp_y = cell_y - 0.55 * inch
-
-    # Max HP
-    s.rbox(X, hp_y, W, 0.45 * inch, fill=C_WHITE)
-    s.text(X + W / 2, hp_y + 0.28 * inch, str(max_hp),
-           size=14, bold=True, color=C_HEADER, align="center")
-    s.text(X + W / 2, hp_y + 0.45 * inch + 2, "Hit Point Maximum",
-           size=6, color=C_SUBTEXT, align="center")
-
-    cur_y = hp_y - 0.52 * inch
-    s.rbox(X, cur_y, W * 0.55 - 2, 0.45 * inch, fill=C_WHITE)
-    s.text(X + (W * 0.55 - 2) / 2, cur_y + 0.28 * inch, str(cur_hp),
-           size=14, bold=True, color=C_HEADER, align="center")
-    s.text(X + (W * 0.55 - 2) / 2, cur_y + 0.45 * inch + 2,
-           "Current HP", size=6, color=C_SUBTEXT, align="center")
-
-    tmp_x = X + W * 0.55 + 2
-    s.rbox(tmp_x, cur_y, W * 0.45 - 2, 0.45 * inch, fill=C_WHITE)
-    s.text(tmp_x + (W * 0.45 - 2) / 2, cur_y + 0.28 * inch, str(tmp_hp),
-           size=14, bold=True, color=C_SUBTEXT, align="center")
-    s.text(tmp_x + (W * 0.45 - 2) / 2, cur_y + 0.45 * inch + 2,
-           "Temp HP", size=6, color=C_SUBTEXT, align="center")
-
-    # Hit Dice + Death Saves row
-    hd_y = cur_y - 0.50 * inch
-    hd_total = level
-    hd_left  = hd_total - hd_used
-
-    s.rbox(X, hd_y, W * 0.45 - 2, 0.40 * inch, fill=C_WHITE)
-    s.text(X + (W * 0.45 - 2) / 2, hd_y + 0.22 * inch,
-           f"{hd_left}/{hd_total} d{die}",
-           size=10, bold=True, color=C_TEXT, align="center")
-    s.text(X + (W * 0.45 - 2) / 2, hd_y + 0.40 * inch + 2,
-           "Hit Dice", size=6, color=C_SUBTEXT, align="center")
-
-    # Death saves
-    ds_x = X + W * 0.45 + 2
-    ds_w = W * 0.55 - 2
-    s.rbox(ds_x, hd_y, ds_w, 0.40 * inch, fill=C_WHITE)
-    s.text(ds_x + ds_w / 2, hd_y + 0.40 * inch + 2,
-           "Death Saves", size=6, color=C_SUBTEXT, align="center")
-
-    def _ds_row(label, count, filled, row_y):
-        s.text(ds_x + 4, row_y, label, size=6, color=C_TEXT)
-        for j in range(3):
-            fill = C_RED if j < filled else C_WHITE
-            stroke = C_RED if label == "Failures" else colors.HexColor("#1a6b1a")
-            s.circle(ds_x + ds_w - 12 - j * 11, row_y + 3, 4,
-                     fill=fill, stroke=stroke)
-
-    _ds_row("Successes", 3, ds_s, hd_y + 0.22 * inch)
-    _ds_row("Failures",  3, ds_f, hd_y + 0.06 * inch)
-
-
-# ---------------------------------------------------------------------------
-# Attacks & Spellcasting
-# ---------------------------------------------------------------------------
-def _attacks_block(s: Sheet, attacks: dict):
-    X   = MARGIN + 3.30 * inch
-    W   = PW - X - MARGIN
-    # positioned below combat block
-    Y   = PH - MARGIN - 110 - 2.60 * inch
-
-    atk_list = attacks.get("attacks", [])
-    spell_ab  = attacks.get("spell_attack_bonus", "")
-    spell_dc  = attacks.get("spell_save_dc", "")
-
-    _section_header(s, X, Y, W, "Attacks & Spellcasting")
-
-    # column headers
-    col_n = X + 4
-    col_b = X + W * 0.45
-    col_d = X + W * 0.60
-    hy    = Y - 10
-    for cx, lbl in [(col_n, "Name"), (col_b, "Atk Bonus"), (col_d, "Damage / Type")]:
-        s.text(cx, hy, lbl, size=6, color=C_SUBTEXT, bold=True)
-
-    s.hrule(X, hy - 2, W, lw=0.5)
-
-    row_h = 10
-    max_rows = 7
-    for i, atk in enumerate(atk_list[:max_rows]):
-        ry = hy - row_h * (i + 1) - 2
-        fill = C_DARK if i % 2 == 0 else C_WHITE
-        s.c.setFillColor(fill)
-        s.c.rect(X, ry - 1, W, row_h, fill=1, stroke=0)
-        s.text(col_n, ry + 1, str(atk.get("name", ""))[:22], size=6.5, color=C_TEXT)
-        s.text(col_b, ry + 1, str(atk.get("attack_bonus", "")), size=6.5, color=C_TEXT)
-        dmg = f"{atk.get('damage_dice', '')} {atk.get('damage_type', '')}".strip()
-        s.text(col_d, ry + 1, dmg[:22], size=6.5, color=C_TEXT)
-
-    # spell stats
-    if spell_ab or spell_dc:
-        sy = hy - row_h * (max_rows + 1) - 6
-        s.text(X + 4, sy, f"Spell Attack Bonus: {spell_ab}   Spell Save DC: {spell_dc}",
-               size=7, color=C_TEXT)
-
-
-# ---------------------------------------------------------------------------
-# Equipment
-# ---------------------------------------------------------------------------
-def _equipment_block(s: Sheet, equip: dict):
-    X   = MARGIN + 1.50 * inch
-    W   = 1.75 * inch
-    # position below skills block (~18 skill rows × 10.2 pt)
-    Y   = PH - MARGIN - 110 - 18 * 10.2 - 20
-
-    items    = equip.get("items", [])
-    currency = equip.get("currency", {})
-
-    _section_header(s, X, Y, W, "Equipment")
-
-    # currency row
-    coins = [("CP", "cp"), ("SP", "sp"), ("EP", "ep"), ("GP", "gp"), ("PP", "pp")]
-    cw    = W / len(coins)
-    cy    = Y - 16
-    for i, (lbl, key) in enumerate(coins):
-        cx = X + i * cw + cw / 2
-        val = currency.get(key, 0)
-        s.rbox(X + i * cw, cy - 12, cw - 2, 12, fill=C_WHITE)
-        s.text(cx, cy - 9, str(val), size=6.5, color=C_TEXT, align="center")
-        s.text(cx, cy - 20, lbl, size=6, color=C_SUBTEXT, align="center")
-
-    # item list
-    iy = cy - 26
-    row_h = 9
-    max_items = 14
-    for i, item in enumerate(items[:max_items]):
-        ry   = iy - i * row_h
-        fill = C_DARK if i % 2 == 0 else C_WHITE
-        s.c.setFillColor(fill)
-        s.c.rect(X, ry - 1, W, row_h, fill=1, stroke=0)
-        name = item.get("name", "")[:26]
-        qty  = item.get("quantity", 1)
-        eqp  = " ✦" if item.get("equipped") else ""
-        s.text(X + 3, ry + 1, f"{qty}× {name}{eqp}", size=6.5, color=C_TEXT)
-
-
-# ---------------------------------------------------------------------------
-# Personality  (far-right column)
-# ---------------------------------------------------------------------------
-def _personality_block(s: Sheet, pers: dict, info: dict):
-    X = PW - MARGIN - 1.65 * inch
-    W = 1.65 * inch
-    Y = PH - MARGIN - 110
-
-    _section_header(s, X, Y, W, "Personality")
-
-    sections = [
-        ("Traits",  "traits"),
-        ("Ideals",  "ideals"),
-        ("Bonds",   "bonds"),
-        ("Flaws",   "flaws"),
-    ]
-    py = Y - 4
-    box_h = 0.52 * inch
-    for label, key in sections:
-        py -= box_h + 4
-        s.rbox(X, py, W, box_h, fill=C_WHITE)
-        s.text(X + W / 2, py + box_h - 6, label,
-               size=6, bold=True, color=C_SUBTEXT, align="center")
-        text = pers.get(key, "") or ""
-        lines = _wrap_text(text, 28)[:4]
-        for j, line in enumerate(lines):
-            s.text(X + 3, py + box_h - 14 - j * 8, line,
-                   size=6.5, color=C_TEXT)
-
-
-# ---------------------------------------------------------------------------
-# Page 2  — Features, Proficiencies
-# ---------------------------------------------------------------------------
-def _draw_page2(s: Sheet, d: dict):
-    s.fill_bg()
-
+    info     = d.get("character_info", {})
     features = d.get("features", {})
     profs    = d.get("proficiencies", {})
-    info     = d.get("character_info", {})
 
-    # page title
-    name = info.get("name", "Unnamed Hero") or "Unnamed Hero"
+    name = info.get("character_name", "") or info.get("name", "") or "Unnamed Hero"
     s.c.setFont("Helvetica-Bold", 14)
     s.c.setFillColor(C_HEADER)
-    s.c.drawString(MARGIN, PH - MARGIN - 14, f"{name}  —  Page 2")
-    s.hrule(MARGIN, PH - MARGIN - 18, PW - 2 * MARGIN, lw=1.2)
+    s.c.drawString(M, PH - M - 14, f"{name}  —  Features, Traits & Proficiencies")
+    s.rule(M, PH - M - 18, PW - 2 * M, lw=1.2)
 
-    _features_block(s, features)
-    _proficiencies_block(s, profs)
-
-    s.hrule(MARGIN, 0.22 * inch, PW - 2 * MARGIN, lw=0.5)
-    s.text(PW / 2, 0.10 * inch, "D&D 5e Character Sheet — Page 2",
-           size=6, color=C_SUBTEXT, align="center")
-
-
-def _features_block(s: Sheet, features: dict):
     feat_list = features.get("features", [])
-    X = MARGIN
-    W = (PW - 2 * MARGIN) * 0.60
-    Y = PH - MARGIN - 30
+    y_top     = PH - M - 30
 
-    _section_header(s, X, Y, W, "Features & Traits")
+    # Left 60%: features
+    FW = (PW - 2 * M) * 0.60
+    FX = M
+    y  = _sec_hdr(s, FX, y_top, FW, "Features & Traits")
 
-    py = Y - 6
-    max_feats = 18
-    for feat in feat_list[:max_feats]:
-        name = feat.get("name", "")
-        desc = feat.get("description", "")
-
-        entry_lines = _wrap_text(desc, 68)[:3]
-        h = 10 + len(entry_lines) * 8 + 4
-
-        if py - h < 0.30 * inch:
+    for feat in feat_list:
+        name_  = feat.get("name", "")
+        desc   = feat.get("description", "")
+        lines  = _wrap(desc, 72)[:4]
+        bh     = 11 + len(lines) * 8 + 3
+        if y - bh < M + 14:
             break
+        y -= bh
+        s.rbox(FX, y, FW, bh, r=3, fill=C_WHITE)
+        s.txt(FX + 4, y + bh - 9, name_, size=8, bold=True, color=C_HEADER)
+        for j, ln in enumerate(lines):
+            s.txt(FX + 4, y + bh - 18 - j * 8, ln, size=6.5, color=C_TEXT)
+        y -= 3
 
-        py -= h
-        s.rbox(X, py, W, h, fill=C_WHITE)
-        s.text(X + 4, py + h - 9, name, size=7.5, bold=True, color=C_HEADER)
-        for j, line in enumerate(entry_lines):
-            s.text(X + 4, py + h - 18 - j * 8, line, size=6.5, color=C_TEXT)
-        py -= 3
+    # Right 38%: proficiencies
+    PX = M + (PW - 2 * M) * 0.62
+    PW2 = PW - M - PX
+    yp  = _sec_hdr(s, PX, y_top, PW2, "Proficiencies & Languages")
 
-
-def _proficiencies_block(s: Sheet, profs: dict):
-    X = MARGIN + (PW - 2 * MARGIN) * 0.62
-    W = (PW - 2 * MARGIN) * 0.38
-    Y = PH - MARGIN - 30
-
-    _section_header(s, X, Y, W, "Proficiencies & Languages")
-
-    categories = [
-        ("Armor",    profs.get("armor", [])),
-        ("Weapons",  profs.get("weapons", [])),
-        ("Tools",    profs.get("tools", [])),
+    cats = [
+        ("Armor",     profs.get("armor", [])),
+        ("Weapons",   profs.get("weapons", [])),
+        ("Tools",     profs.get("tools", [])),
         ("Languages", profs.get("languages", [])),
     ]
-
-    py = Y - 6
-    for cat, items in categories:
+    for cat, items in cats:
         if not items:
             continue
-        py -= 14
-        s.text(X + 3, py, cat, size=7, bold=True, color=C_HEADER)
-        py -= 2
-        s.hrule(X + 3, py, W - 6, lw=0.4)
-        text = ", ".join(items) if isinstance(items, list) else str(items)
-        lines = _wrap_text(text, 36)[:6]
-        for line in lines:
-            py -= 9
-            s.text(X + 3, py, line, size=6.5, color=C_TEXT)
-        py -= 4
+        yp -= 13
+        s.txt(PX + 3, yp, cat, size=7.5, bold=True, color=C_HEADER)
+        yp -= 2
+        s.rule(PX + 3, yp, PW2 - 6, lw=0.4)
+        text  = ", ".join(items) if isinstance(items, list) else str(items)
+        lines = _wrap(text, 34)
+        for ln in lines[:6]:
+            yp -= 9
+            s.txt(PX + 3, yp, ln, size=7, color=C_TEXT)
+        yp -= 4
+
+    s.rule(M, M + 10, PW - 2 * M, lw=0.4)
+    s.txt(PW / 2, M + 3, "D&D 5e Character Sheet — Page 2",
+          size=6, color=C_SUBTEXT, align="center")
 
 
 # ---------------------------------------------------------------------------
-# Public entry point
+# Entry point
 # ---------------------------------------------------------------------------
 def export_pdf(char_data: dict, path: str):
     c = rl_canvas.Canvas(path, pagesize=LETTER)
     sh = Sheet(c)
-
-    _draw_page1(sh, char_data)
+    _page1(sh, char_data)
     c.showPage()
-    _draw_page2(sh, char_data)
+    _page2(sh, char_data)
     c.showPage()
-
     c.save()
