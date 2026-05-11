@@ -479,7 +479,7 @@ def _equipment_col(s: Sheet, equip: dict, y_top: float) -> float:
 # PERSONALITY  (column 4)
 # ---------------------------------------------------------------------------
 PERS_FIELDS = [
-    ("Personality Traits", "traits"),
+    ("Personality Traits", "personality_traits"),
     ("Ideals",             "ideals"),
     ("Bonds",              "bonds"),
     ("Flaws",              "flaws"),
