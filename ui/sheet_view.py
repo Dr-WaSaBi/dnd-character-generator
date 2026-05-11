@@ -515,9 +515,52 @@ class CombatPanel(SectionPanel):
         self._blo.addStretch()
 
 
+# ── Clickable weapon row ──────────────────────────────────────────────────────
+
+class _WeaponRow(QWidget):
+    """A weapon row that shows hover highlight and fires a callback on click."""
+
+    def __init__(self, idx: int, name: str, atk_bonus: str,
+                 damage_display: str, on_click, parent=None):
+        super().__init__(parent)
+        self._on_click  = on_click
+        self._bg_normal = CPD if idx % 2 == 0 else CP
+        self.setStyleSheet(f"background:{self._bg_normal};border:none;")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(f"Click to roll attack & damage for {name}")
+
+        rlo = QHBoxLayout(self)
+        rlo.setContentsMargins(2, 2, 2, 2)
+        rlo.setSpacing(0)
+        rlo.addWidget(_lbl(name[:18],         CT,  7), 3)
+        rlo.addWidget(_lbl(atk_bonus,         CT,  7, bold=True,
+                           align=Qt.AlignmentFlag.AlignCenter), 1)
+        rlo.addWidget(_lbl(damage_display[:20], CT, 7), 3)
+        dice_ico = _lbl("⚄", CTS, 8, align=Qt.AlignmentFlag.AlignRight)
+        dice_ico.setFixedWidth(14)
+        rlo.addWidget(dice_ico)
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            self._on_click()
+            e.accept()
+        else:
+            super().mousePressEvent(e)
+
+    def enterEvent(self, e):
+        self.setStyleSheet(f"background:{CPH};border:none;")
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        self.setStyleSheet(f"background:{self._bg_normal};border:none;")
+        super().leaveEvent(e)
+
+
 # ── SECTION 6  Attacks & Spellcasting ────────────────────────────────────────
 
 class AttacksPanel(SectionPanel):
+    weapon_clicked = pyqtSignal(str, str, str)   # name, atk_bonus, damage_dice
+
     def __init__(self, parent=None):
         super().__init__(6, "Attacks & Spellcasting", parent)
 
@@ -528,7 +571,7 @@ class AttacksPanel(SectionPanel):
         sab   = data.get("spell_atk_bonus")
         sdc   = data.get("spell_save_dc")
 
-        # Header row
+        # Column header
         hdr = QWidget()
         hdr.setStyleSheet(f"background:{CPD};border:none;")
         hdrlo = QHBoxLayout(hdr)
@@ -538,22 +581,20 @@ class AttacksPanel(SectionPanel):
         hdrlo.addWidget(_lbl("Atk",           CTS, 7, bold=True,
                              align=Qt.AlignmentFlag.AlignCenter), 1)
         hdrlo.addWidget(_lbl("Damage / Type", CTS, 7, bold=True), 3)
+        hdrlo.addWidget(_lbl("",              CTS, 7), 0)   # spacer for dice icon
         self._add(hdr)
         self._add(_hrule())
 
         for i, atk in enumerate(atks[:9]):
-            row = QWidget()
-            row.setStyleSheet(f"background:{CPD if i%2==0 else CP};border:none;")
-            rlo = QHBoxLayout(row)
-            rlo.setContentsMargins(2, 1, 2, 1)
-            rlo.setSpacing(0)
-            name = str(atk.get("name", ""))[:18]
+            name = str(atk.get("name", ""))
             ab   = str(atk.get("attack_bonus", ""))
-            dmg  = f"{atk.get('damage','')}{' '+atk.get('damage_type','') if atk.get('damage_type') else ''}"
-            rlo.addWidget(_lbl(name, CT, 7), 3)
-            rlo.addWidget(_lbl(ab, CT, 7, bold=True,
-                               align=Qt.AlignmentFlag.AlignCenter), 1)
-            rlo.addWidget(_lbl(dmg[:22], CT, 7), 3)
+            dice = str(atk.get("damage", ""))
+            dtype = atk.get("damage_type", "")
+            display = f"{dice}{' ' + dtype if dtype else ''}"
+            row = _WeaponRow(
+                idx=i, name=name, atk_bonus=ab, damage_display=display,
+                on_click=lambda n=name, a=ab, d=dice: self.weapon_clicked.emit(n, a, d),
+            )
             self._add(row)
 
         if not atks:
@@ -754,9 +795,11 @@ class ProfPanel(SectionPanel):
 class SheetView(QWidget):
     """
     The full character sheet UI. Emits section_clicked(int) when any
-    section panel is clicked. Call refresh(char_data) after any data change.
+    section panel is clicked, and weapon_attacked(name, atk_bonus, damage)
+    when a weapon row is clicked. Call refresh(char_data) after any data change.
     """
     section_clicked = pyqtSignal(int)
+    weapon_attacked = pyqtSignal(str, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -806,6 +849,7 @@ class SheetView(QWidget):
         self._equip   = EquipmentPanel()
         self._combat.clicked.connect(self.section_clicked)
         self._attacks.clicked.connect(self.section_clicked)
+        self._attacks.weapon_clicked.connect(self.weapon_attacked)
         self._equip.clicked.connect(self.section_clicked)
         c3.addWidget(self._combat,  3)
         c3.addWidget(self._attacks, 3)

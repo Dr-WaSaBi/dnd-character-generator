@@ -3,7 +3,7 @@ import os
 import traceback
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QScrollArea, QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt
@@ -33,25 +33,37 @@ class CharacterSheetWindow(QMainWindow):
         self._build_menu()
 
     def _build_ui(self):
+        from ui.dice_roller import DiceRollerPanel
+
         outer = QWidget()
         outer.setStyleSheet(f"background-color: {COLOR_WINDOW_BG};")
         self.setCentralWidget(outer)
         outer_lo = QVBoxLayout(outer)
         outer_lo.setContentsMargins(12, 12, 12, 12)
 
+        content = QHBoxLayout()
+        content.setSpacing(8)
+        content.setContentsMargins(0, 0, 0, 0)
+        outer_lo.addLayout(content, 1)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        outer_lo.addWidget(scroll)
 
         self._sheet_view = SheetView()
         self._sheet_view.section_clicked.connect(self._on_section_clicked)
         scroll.setWidget(self._sheet_view)
 
+        self._dice_panel = DiceRollerPanel()
+        self._sheet_view.weapon_attacked.connect(self._dice_panel.weapon_attack)
+
+        content.addWidget(scroll, 1)
+        content.addWidget(self._dice_panel)
+
         self.statusBar().setFixedHeight(26)
         self.statusBar().showMessage(
-            "  Click any section to begin building your character."
+            "  Click any section to edit  ·  Click a weapon row to roll attack & damage"
         )
 
     # ── Menu bar ─────────────────────────────────────────────────────────────
