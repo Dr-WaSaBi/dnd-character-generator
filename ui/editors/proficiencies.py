@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/proficiencies.py                               ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Editor dialog for armor, weapon, tool proficiencies and languages. ║
+# ║  Auto-applies class defaults and race languages; all are editable.  ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QFrame, QPushButton, QWidget,
@@ -79,6 +90,7 @@ RACE_LANGUAGES: dict[str, list[str]] = {
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font, and alignment."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -92,6 +104,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -122,6 +135,7 @@ class TagListWidget(QWidget):
     """Editable list of text tags (languages, tools, etc.)."""
 
     def __init__(self, items: list[str] | None = None, parent=None):
+        """Build the tag list, optionally pre-populated with the given string items."""
         super().__init__(parent)
         self.setStyleSheet("background:transparent;")
         self._tags: list[QLineEdit] = []
@@ -133,6 +147,7 @@ class TagListWidget(QWidget):
             self._add_tag(item)
 
     def _add_tag(self, text: str = ""):
+        """Append a new editable tag field and its remove button before the trailing stretch."""
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(4)
@@ -162,14 +177,17 @@ class TagListWidget(QWidget):
         self._lo.insertWidget(self._lo.count() - 1, container)
 
     def _remove(self, field: QLineEdit, container: QWidget):
+        """Remove the tag field and its container widget from the layout."""
         self._tags.remove(field)
         self._lo.removeWidget(container)
         container.deleteLater()
 
     def add_entry(self):
+        """Append a new empty tag field (called by the external Add button)."""
         self._add_tag()
 
     def values(self) -> list[str]:
+        """Return a list of non-empty stripped strings from all tag fields."""
         return [f.text().strip() for f in self._tags if f.text().strip()]
 
 
@@ -177,6 +195,7 @@ class ProficienciesEditor(QDialog):
     data_saved = pyqtSignal(dict)
 
     def __init__(self, char_data: dict, existing: dict | None = None, parent=None):
+        """Initialize from char_data class/race defaults, apply any saved overrides, and build the UI."""
         super().__init__(parent)
         self.setWindowTitle("Section ⑩  —  Proficiencies & Languages")
         self.setMinimumSize(580, 620)
@@ -193,6 +212,7 @@ class ProficienciesEditor(QDialog):
         self._build_ui(existing or {})
 
     def _build_ui(self, data: dict):
+        """Build the scrollable armor/weapon checkboxes, tools and language TagListWidgets, and buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 18)
         root.setSpacing(0)
@@ -308,6 +328,7 @@ class ProficienciesEditor(QDialog):
         root.addLayout(btn_row)
 
     def _small_add_btn(self) -> QPushButton:
+        """Create a compact styled add-entry button for the tools and languages sections."""
         btn = QPushButton("＋ Add")
         btn.setFixedHeight(24)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -320,6 +341,7 @@ class ProficienciesEditor(QDialog):
         return btn
 
     def _on_save(self):
+        """Collect checked armor/weapons and tag-list values into a dict, emit data_saved, and close."""
         out = {
             "armor":     [p for p, cb in self._armor_checks.items()  if cb.isChecked()],
             "weapons":   [p for p, cb in self._weapon_checks.items() if cb.isChecked()],
@@ -331,6 +353,7 @@ class ProficienciesEditor(QDialog):
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)

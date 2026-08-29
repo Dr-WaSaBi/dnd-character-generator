@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/character_info.py                              ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Editor dialog for basic character identity (name, class, level,     ║
+# ║  race, background, alignment, XP, player name).                      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QFrame, QPushButton, QLineEdit, QComboBox,
@@ -41,6 +52,7 @@ BACKGROUNDS = [
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font, and alignment."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -54,6 +66,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -93,6 +106,7 @@ _INPUT_CSS = (
 
 
 def _combo(options: list[str], placeholder: str = "") -> QComboBox:
+    """Create a styled QComboBox pre-populated with options and an optional placeholder item."""
     c = QComboBox()
     c.setStyleSheet(_INPUT_CSS)
     c.setFixedHeight(32)
@@ -104,6 +118,7 @@ def _combo(options: list[str], placeholder: str = "") -> QComboBox:
 
 
 def _line(placeholder: str = "") -> QLineEdit:
+    """Create a styled QLineEdit with an optional placeholder string."""
     e = QLineEdit()
     e.setStyleSheet(_INPUT_CSS)
     e.setFixedHeight(32)
@@ -116,6 +131,7 @@ class CharacterInfoEditor(QDialog):
     info_saved = pyqtSignal(dict)
 
     def __init__(self, existing: dict | None = None, parent=None):
+        """Initialize the dialog, build the grid of input fields, and populate from existing data."""
         super().__init__(parent)
         self.setWindowTitle("Section ①  —  Character Info")
         self.setMinimumSize(560, 440)
@@ -126,6 +142,7 @@ class CharacterInfoEditor(QDialog):
             self._load(existing)
 
     def _build_ui(self):
+        """Build the character info grid (name, class, level, race, background, alignment, XP, player)."""
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 22, 28, 20)
         root.setSpacing(14)
@@ -201,6 +218,7 @@ class CharacterInfoEditor(QDialog):
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -221,6 +239,7 @@ class CharacterInfoEditor(QDialog):
         return btn
 
     def _on_save(self):
+        """Collect all field values into a dict, emit info_saved, and close the dialog."""
         out = {
             "character_name": self._name.text().strip(),
             "class":          self._class.currentText() if self._class.currentIndex() > 0 else "",
@@ -235,6 +254,7 @@ class CharacterInfoEditor(QDialog):
         self.accept()
 
     def _load(self, data: dict):
+        """Populate all input widgets from the supplied existing character-info dict."""
         if v := data.get("character_name"):
             self._name.setText(v)
 

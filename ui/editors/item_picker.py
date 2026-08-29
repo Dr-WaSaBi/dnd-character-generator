@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/item_picker.py                                 ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Browse-and-cart item picker dialog. Shows SRD items across tabbed  ║
+# ║  categories; user builds a cart then commits all at once.           ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QPushButton, QWidget,
@@ -264,6 +275,7 @@ _CART_QTY_CSS = (
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font, and alignment."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -277,6 +289,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -290,6 +303,7 @@ class CartRow(QWidget):
     remove_requested = pyqtSignal(object)
 
     def __init__(self, name: str, weight: float, notes: str, qty: int = 1, parent=None):
+        """Create a cart row displaying the item name, weight, and a qty spinbox."""
         super().__init__(parent)
         self.setStyleSheet("background:transparent;")
         self._name = name
@@ -298,6 +312,7 @@ class CartRow(QWidget):
         self._build(qty)
 
     def _build(self, qty: int):
+        """Lay out the item name label, quantity spinner, weight label, and remove button."""
         row = QHBoxLayout(self)
         row.setContentsMargins(2, 2, 2, 2)
         row.setSpacing(6)
@@ -332,6 +347,7 @@ class CartRow(QWidget):
         row.addWidget(rm)
 
     def to_dict(self) -> dict:
+        """Return a dict with name, qty, weight, and notes for this cart row."""
         return {
             "name":   self._name,
             "qty":    self._qty_spin.value(),
@@ -347,6 +363,7 @@ class ItemPickerDialog(QDialog):
     items_chosen = pyqtSignal(list)   # list of {name, qty, weight, notes}
 
     def __init__(self, parent=None):
+        """Initialize the dialog with an empty cart and build the full tabbed catalog UI."""
         super().__init__(parent)
         self.setWindowTitle("Browse & Add Items")
         self.setMinimumSize(660, 680)
@@ -356,6 +373,7 @@ class ItemPickerDialog(QDialog):
         self._build_ui()
 
     def _build_ui(self):
+        """Build the search bar, tabbed category lists, qty/add-to-cart controls, cart area, and buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(8)
@@ -502,6 +520,7 @@ class ItemPickerDialog(QDialog):
     # ── Search ────────────────────────────────────────────────────────────────
 
     def _on_search(self, text: str):
+        """Hide list items whose names do not contain the search text (case-insensitive)."""
         text = text.strip().lower()
         for lst in self._lists.values():
             for i in range(lst.count()):
@@ -512,6 +531,7 @@ class ItemPickerDialog(QDialog):
     # ── Cart management ───────────────────────────────────────────────────────
 
     def _current_item_data(self) -> tuple | None:
+        """Return (name, weight, notes) for the selected item in the active tab, or None if none selected."""
         lst = self._tabs.currentWidget().layout().itemAt(0).widget()
         selected = lst.selectedItems()
         if not selected:
@@ -519,12 +539,14 @@ class ItemPickerDialog(QDialog):
         return selected[0].data(Qt.ItemDataRole.UserRole)
 
     def _on_double_click(self, list_item: QListWidgetItem):
+        """Add qty-1 of a double-clicked item directly to the cart."""
         data = list_item.data(Qt.ItemDataRole.UserRole)
         if data:
             name, weight, notes = data
             self._add_to_cart(name, weight, notes, qty=1)
 
     def _on_add_to_cart(self):
+        """Add the selected item with the current qty spinner value to the cart."""
         data = self._current_item_data()
         if not data:
             return
@@ -533,6 +555,7 @@ class ItemPickerDialog(QDialog):
         self._qty.setValue(1)
 
     def _add_to_cart(self, name: str, weight: float, notes: str, qty: int):
+        """Add a CartRow, or increment qty if the item name already exists in the cart."""
         # If the item is already in the cart, just bump its qty
         for row in self._cart_rows:
             if row._name == name:
@@ -548,12 +571,14 @@ class ItemPickerDialog(QDialog):
         self._refresh_cart_state()
 
     def _remove_cart_row(self, row: CartRow):
+        """Remove a CartRow from the layout and update the cart state counters."""
         self._cart_layout.removeWidget(row)
         row.deleteLater()
         self._cart_rows.remove(row)
         self._refresh_cart_state()
 
     def _refresh_cart_state(self):
+        """Update the empty-cart label, item count/weight summary, and the Add button enabled state."""
         n = len(self._cart_rows)
         self._empty_lbl.setVisible(n == 0)
         self._save_btn.setEnabled(n > 0)
@@ -568,6 +593,7 @@ class ItemPickerDialog(QDialog):
     # ── Save ──────────────────────────────────────────────────────────────────
 
     def _on_save(self):
+        """Emit items_chosen with all cart rows converted to dicts and close the dialog."""
         if not self._cart_rows:
             return
         self.items_chosen.emit([r.to_dict() for r in self._cart_rows])

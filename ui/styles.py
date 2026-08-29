@@ -1,3 +1,15 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/styles.py                                              ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Central palette and Qt stylesheet for the application. All colors,  ║
+# ║  fonts, and widget rules live here so the look is changed in one     ║
+# ║  place. Themed around parchment, dark red, and antique gold.         ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 # Parchment surface colors
 COLOR_PARCHMENT        = "#F5E6C8"
 COLOR_PARCHMENT_DARK   = "#EDD9A3"

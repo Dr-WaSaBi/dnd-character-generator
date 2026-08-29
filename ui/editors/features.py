@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/features.py                                    ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Editor dialog for features & traits. Shows scrollable FeatureCards ║
+# ║  and can auto-populate from features_data based on class/race.      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QPushButton, QWidget,
@@ -18,6 +29,7 @@ from ui.editors.features_data import CLASS_FEATURES, RACE_TRAITS, BACKGROUND_FEA
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font, and alignment."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -31,6 +43,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -57,6 +70,7 @@ class FeatureCard(QWidget):
     )
 
     def __init__(self, data: dict | None = None, parent=None):
+        """Create a parchment-styled card widget, optionally pre-filled with name and description."""
         super().__init__(parent)
         self.setStyleSheet(
             f"background:{COLOR_PARCHMENT_DARK};"
@@ -65,6 +79,7 @@ class FeatureCard(QWidget):
         self._build(data or {})
 
     def _build(self, d: dict):
+        """Lay out the feature-name field, remove button, and description text editor."""
         lo = QVBoxLayout(self)
         lo.setContentsMargins(8, 6, 8, 6)
         lo.setSpacing(4)
@@ -102,6 +117,7 @@ class FeatureCard(QWidget):
         lo.addWidget(self._desc)
 
     def to_dict(self) -> dict:
+        """Return a dict with 'name' and 'description' extracted from the card's input widgets."""
         return {
             "name":        self._name.text().strip(),
             "description": self._desc.toPlainText().strip(),
@@ -112,6 +128,7 @@ class FeaturesEditor(QDialog):
     data_saved = pyqtSignal(dict)
 
     def __init__(self, char_data: dict | None = None, existing: dict | None = None, parent=None):
+        """Initialize the dialog, load any existing feature cards, and build the scrollable UI."""
         super().__init__(parent)
         self._char_data = char_data or {}
         self.setWindowTitle("Section ⑨  —  Features & Traits")
@@ -122,6 +139,7 @@ class FeaturesEditor(QDialog):
         self._build_ui(existing or {})
 
     def _build_ui(self, data: dict):
+        """Build the scrollable card list, Add and Load buttons, status label, and Save/Cancel buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 18)
         root.setSpacing(10)
@@ -203,17 +221,20 @@ class FeaturesEditor(QDialog):
         root.addLayout(btn_row)
 
     def _add_card(self, data: dict | None = None):
+        """Insert a new FeatureCard before the trailing stretch in the scrollable inner layout."""
         card = FeatureCard(data)
         card.remove_requested.connect(self._remove_card)
         self._cards.append(card)
         self._inner_lo.insertWidget(self._inner_lo.count() - 1, card)
 
     def _remove_card(self, card: FeatureCard):
+        """Remove a FeatureCard from the layout and the internal list."""
         self._inner_lo.removeWidget(card)
         card.deleteLater()
         self._cards.remove(card)
 
     def _load_from_class_race(self):
+        """Auto-populate cards from CLASS_FEATURES, RACE_TRAITS, and BACKGROUND_FEATURES, skipping duplicates."""
         info = self._char_data.get("character_info", {})
         cls        = info.get("class", "")
         race       = info.get("race", "")
@@ -248,12 +269,14 @@ class FeaturesEditor(QDialog):
         self._status_lbl.setText(f"Added {added} feature{'s' if added != 1 else ''}.")
 
     def _on_save(self):
+        """Collect non-empty feature cards into a list, emit data_saved, and close the dialog."""
         features = [c.to_dict() for c in self._cards if c.to_dict()["name"]]
         self.data_saved.emit({"features": features})
         self.accept()
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)

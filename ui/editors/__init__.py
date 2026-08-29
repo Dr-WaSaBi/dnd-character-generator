@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/__init__.py                                    ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Public surface of the editors sub-package. Re-exports all dialog    ║
+# ║  classes so the rest of the app imports from a single namespace.     ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from .ability_scores import AbilityScoreEditor
 from .character_info import CharacterInfoEditor
 from .saving_throws import SavingThrowEditor

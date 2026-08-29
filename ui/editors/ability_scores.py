@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/ability_scores.py                              ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Editor dialog for the six ability scores. Supports three methods:  ║
+# ║  roll 4d6-drop-lowest, standard array, or 27-point point buy.       ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 import random
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
@@ -27,17 +38,20 @@ PB_MIN, PB_MAX = 8, 15
 
 
 def _roll() -> int:
+    """Roll 4d6, drop the lowest die, and return the sum of the remaining three."""
     dice = [random.randint(1, 6) for _ in range(4)]
     return sum(sorted(dice)[1:])
 
 
 def _mod(score: int) -> str:
+    """Return the signed ability modifier string for the given score (e.g. '+2', '-1')."""
     m = (score - 10) // 2
     return f"+{m}" if m >= 0 else str(m)
 
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft, wrap=False) -> QLabel:
+    """Create a styled QLabel with optional word-wrap, alignment, bold, and italic."""
     w = QLabel(text)
     w.setAlignment(align)
     w.setWordWrap(wrap)
@@ -52,6 +66,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -76,6 +91,7 @@ class AbilityCard(QFrame):
                    f"border:2px solid {COLOR_SECTION_BORDER_HOVER};border-radius:8px;}}")
 
     def __init__(self, ability: str, parent=None):
+        """Create a card widget for the given ability abbreviation, starting in empty/roll mode."""
         super().__init__(parent)
         self.ability = ability
         self._score: int | None = None
@@ -88,6 +104,7 @@ class AbilityCard(QFrame):
         self.setStyleSheet(self._S_EMPTY)
 
     def _build(self):
+        """Lay out the ability name, rule, score label, modifier label, and +/- point-buy buttons."""
         lo = QVBoxLayout(self)
         lo.setContentsMargins(6, 8, 6, 8)
         lo.setSpacing(2)
@@ -135,6 +152,7 @@ class AbilityCard(QFrame):
 
     # public API
     def set_score(self, score: int | None):
+        """Set the displayed score and modifier; passing None resets the card to empty."""
         self._score = score
         if score is not None:
             self.score_lbl.setText(str(score))
@@ -145,13 +163,16 @@ class AbilityCard(QFrame):
         self._refresh()
 
     def score(self) -> int | None:
+        """Return the current ability score, or None if unassigned."""
         return self._score
 
     def set_selected(self, v: bool):
+        """Toggle the selection highlight and refresh the card border/background."""
         self._selected = v
         self._refresh()
 
     def set_mode(self, mode: str):
+        """Switch the card between 'roll', 'array', and 'pointbuy' modes, showing/hiding ± buttons."""
         self._mode = mode
         if mode == "pointbuy":
             self.pb_widget.show()
@@ -164,6 +185,7 @@ class AbilityCard(QFrame):
         self._refresh()
 
     def _refresh(self):
+        """Update the card's border/background to reflect selected, filled, or empty state."""
         if self._selected:
             self.setStyleSheet(self._S_SELECTED)
         elif self._score is not None:
@@ -172,16 +194,19 @@ class AbilityCard(QFrame):
             self.setStyleSheet(self._S_EMPTY)
 
     def enterEvent(self, e):
+        """Apply hover style when the pointer enters the card (ignored in point-buy mode)."""
         if not self._selected and self._mode != "pointbuy":
             self.setStyleSheet(self._S_HOVER)
         super().enterEvent(e)
 
     def leaveEvent(self, e):
+        """Restore the normal style when the pointer leaves the card."""
         if not self._selected:
             self._refresh()
         super().leaveEvent(e)
 
     def mousePressEvent(self, e):
+        """Emit card_clicked on left-click to trigger score assignment (disabled in point-buy mode)."""
         if e.button() == Qt.MouseButton.LeftButton and self._mode != "pointbuy":
             self.card_clicked.emit(self.ability)
         super().mousePressEvent(e)
@@ -191,6 +216,7 @@ class AbilityCard(QFrame):
 
 class Chip(QPushButton):
     def __init__(self, value: int, parent=None):
+        """Create a clickable score chip button displaying the given integer value."""
         super().__init__(str(value), parent)
         self.value = value
         self.setFixedSize(56, 50)
@@ -199,15 +225,18 @@ class Chip(QPushButton):
         self._refresh()
 
     def set_selected(self, v: bool):
+        """Highlight (or un-highlight) the chip as the currently chosen value."""
         self._selected = v
         self._refresh()
 
     def set_used(self, v: bool):
+        """Disable the chip and dim it once its value has been assigned to an ability card."""
         self._selected = False
         self.setEnabled(not v)
         self._refresh()
 
     def _refresh(self):
+        """Update the chip's stylesheet to reflect disabled, selected, or normal states."""
         if not self.isEnabled():
             s = (f"QPushButton{{background:#B8A888;color:{COLOR_TEXT_SUBTEXT};"
                  f"border:2px solid #A09070;border-radius:6px;"
@@ -231,6 +260,7 @@ class AbilityScoreEditor(QDialog):
     scores_saved = pyqtSignal(dict)   # {"STR": 15, "DEX": 14, ...}
 
     def __init__(self, existing: dict | None = None, parent=None):
+        """Initialize the dialog, set up mode state, build the UI, and optionally load existing scores."""
         super().__init__(parent)
         self.setWindowTitle("Section ②  —  Ability Scores")
         self.setMinimumSize(780, 560)
@@ -254,6 +284,7 @@ class AbilityScoreEditor(QDialog):
     # ── UI construction ──────────────────────────────────────────────────────
 
     def _build_ui(self):
+        """Construct the full dialog: title, method-selector bar, ability cards, mode panels, and buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(26, 20, 26, 20)
         root.setSpacing(12)
@@ -299,6 +330,7 @@ class AbilityScoreEditor(QDialog):
         root.addLayout(row)
 
     def _build_method_row(self) -> QWidget:
+        """Build the three-button method selector (Roll / Standard Array / Point Buy)."""
         w = QWidget()
         w.setStyleSheet("background:transparent;")
         row = QHBoxLayout(w)
@@ -337,6 +369,7 @@ class AbilityScoreEditor(QDialog):
         return w
 
     def _build_cards_row(self) -> QWidget:
+        """Build a centered row containing the six AbilityCard widgets."""
         w = QWidget()
         w.setStyleSheet("background:transparent;")
         row = QHBoxLayout(w)
@@ -354,6 +387,7 @@ class AbilityScoreEditor(QDialog):
         return w
 
     def _build_roll_panel(self) -> QWidget:
+        """Build the roll-dice panel with a Roll and Reroll button and a chip container row."""
         w = QWidget()
         w.setStyleSheet("background:transparent;")
         lo = QVBoxLayout(w)
@@ -381,6 +415,7 @@ class AbilityScoreEditor(QDialog):
         return w
 
     def _build_array_panel(self) -> QWidget:
+        """Build the standard-array panel showing the six fixed value chips."""
         w = QWidget()
         w.setStyleSheet("background:transparent;")
         row = QHBoxLayout(w)
@@ -396,6 +431,7 @@ class AbilityScoreEditor(QDialog):
         return w
 
     def _build_pb_panel(self) -> QWidget:
+        """Build the point-buy panel showing the remaining-points label."""
         w = QWidget()
         w.setStyleSheet("background:transparent;")
         row = QHBoxLayout(w)
@@ -412,6 +448,7 @@ class AbilityScoreEditor(QDialog):
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -434,6 +471,7 @@ class AbilityScoreEditor(QDialog):
     # ── Mode switching ───────────────────────────────────────────────────────
 
     def _switch_mode(self, mode: str):
+        """Switch the UI to roll, array, or pointbuy mode; reset cards/chips and update the hint text."""
         self._mode = mode
         self._clear_selection()
 
@@ -469,6 +507,7 @@ class AbilityScoreEditor(QDialog):
     # ── Rolling ──────────────────────────────────────────────────────────────
 
     def _on_roll(self):
+        """Generate six 4d6-drop-lowest rolls and display them as clickable chips."""
         self._clear_selection()
         for ab in ABILITIES:
             self._cards[ab].set_score(None)
@@ -487,6 +526,7 @@ class AbilityScoreEditor(QDialog):
         self._hint.setText("Select a value below  →  click an ability score to assign it.")
 
     def _reset_roll_chips(self):
+        """Remove and delete all current roll chips and restore the initial Roll button."""
         for chip in self._roll_chips:
             self._chips_row.removeWidget(chip)
             chip.deleteLater()
@@ -497,6 +537,7 @@ class AbilityScoreEditor(QDialog):
     # ── Assignment ───────────────────────────────────────────────────────────
 
     def _on_chip_clicked(self, chip: Chip):
+        """Select a chip for assignment; auto-assign immediately if an ability card is already waiting."""
         if not chip.isEnabled():
             return
         if self._sel_chip is chip:
@@ -512,6 +553,7 @@ class AbilityScoreEditor(QDialog):
             self._do_assign(self._sel_card, chip)
 
     def _on_card_clicked(self, ability: str):
+        """Assign the selected chip to an ability card, or unassign if the card already has a value."""
         existing = self._assignments.get(ability)
         if existing is not None:
             # unassign — return chip to pool
@@ -533,6 +575,7 @@ class AbilityScoreEditor(QDialog):
             self._cards[ability].set_selected(True)
 
     def _do_assign(self, ability: str, chip: Chip):
+        """Commit a chip value to an ability card, mark the chip used, and clear the selection state."""
         self._assignments[ability] = chip
         self._cards[ability].set_score(chip.value)
         self._cards[ability].set_selected(False)
@@ -541,6 +584,7 @@ class AbilityScoreEditor(QDialog):
         self._sel_card = None
 
     def _clear_selection(self):
+        """Deselect the currently highlighted chip and ability card without changing assignments."""
         if self._sel_chip:
             self._sel_chip.set_selected(False)
             self._sel_chip = None
@@ -551,6 +595,7 @@ class AbilityScoreEditor(QDialog):
     # ── Point buy ────────────────────────────────────────────────────────────
 
     def _pb_adjust(self, ability: str, delta: int):
+        """Increment or decrement a point-buy score by delta, enforcing the 8–15 range and 27-pt budget."""
         if self._mode != "pointbuy":
             return
         card = self._cards[ability]
@@ -567,6 +612,7 @@ class AbilityScoreEditor(QDialog):
         self._pb_refresh_buttons()
 
     def _pb_refresh_label(self):
+        """Update the points-remaining label based on the current sum of PB costs."""
         spent = sum(PB_COSTS.get(self._cards[ab].score() or PB_MIN, 0) for ab in ABILITIES)
         rem = PB_BUDGET - spent
         color = COLOR_BADGE_BG if rem == 0 else COLOR_TEXT_HEADER
@@ -576,6 +622,7 @@ class AbilityScoreEditor(QDialog):
         )
 
     def _pb_refresh_buttons(self):
+        """Enable/disable each card's +/- buttons based on range limits and remaining budget."""
         scores = {ab: (self._cards[ab].score() or PB_MIN) for ab in ABILITIES}
         spent = sum(PB_COSTS.get(v, 0) for v in scores.values())
         remaining = PB_BUDGET - spent
@@ -589,6 +636,7 @@ class AbilityScoreEditor(QDialog):
     # ── Clear / save ─────────────────────────────────────────────────────────
 
     def _on_clear(self):
+        """Reset all cards and chips to their unassigned state for the current mode."""
         self._clear_selection()
         if self._mode == "pointbuy":
             for card in self._cards.values():
@@ -607,6 +655,7 @@ class AbilityScoreEditor(QDialog):
                     chip.set_used(False)
 
     def _on_save(self):
+        """Collect assigned scores from all cards, emit scores_saved, and close the dialog."""
         out = {}
         for ab in ABILITIES:
             s = self._cards[ab].score()
@@ -616,6 +665,7 @@ class AbilityScoreEditor(QDialog):
         self.accept()
 
     def _load(self, existing: dict):
+        """Populate ability cards from a previously saved {ability: score} dict."""
         for ab, val in existing.items():
             if ab in self._cards:
                 self._cards[ab].set_score(val)

@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/combat_stats.py                                ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Editor dialog for AC, initiative, speed, HP, hit dice, and death   ║
+# ║  saving throw toggles; auto-calculates defaults from class/scores.  ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QFrame, QPushButton, QWidget,
@@ -33,14 +44,17 @@ DEFAULT_SPEED = 30
 
 
 def _mod(score: int) -> int:
+    """Return the D&D ability modifier for the given score: (score - 10) // 2."""
     return (score - 10) // 2
 
 
 def _fmt(val: int) -> str:
+    """Format an integer as a signed string (e.g. 3 → '+3', -1 → '-1')."""
     return f"+{val}" if val >= 0 else str(val)
 
 
 def _calc_max_hp(cls: str, level: int, con: int | None) -> int | None:
+    """Return the average max HP for the given class, level, and CON score, or None if class unknown."""
     die = HIT_DICE.get(cls)
     if die is None:
         return None
@@ -51,6 +65,7 @@ def _calc_max_hp(cls: str, level: int, con: int | None) -> int | None:
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font, and alignment."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -64,6 +79,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -83,6 +99,7 @@ _SPIN_CSS = (
 
 
 def _spin(lo: int, hi: int, val: int, w: int = 90) -> QSpinBox:
+    """Create a styled, centred QSpinBox with the given range, default value, and fixed width."""
     s = QSpinBox()
     s.setRange(lo, hi)
     s.setValue(val)
@@ -133,6 +150,7 @@ class DeathSaveWidget(QWidget):
     """Three toggle circles for successes or failures."""
 
     def __init__(self, kind: str, count: int = 0, parent=None):
+        """Build three toggle circles for tracking success or failure death saves."""
         super().__init__(parent)
         self._kind = kind   # "success" or "failure"
         self._count = count
@@ -141,6 +159,7 @@ class DeathSaveWidget(QWidget):
         self._build()
 
     def _build(self):
+        """Lay out the three toggle buttons and connect their click signals."""
         lo = QHBoxLayout(self)
         lo.setContentsMargins(0, 0, 0, 0)
         lo.setSpacing(6)
@@ -156,6 +175,7 @@ class DeathSaveWidget(QWidget):
         self._refresh()
 
     def _refresh(self):
+        """Redraw all three buttons to reflect the current filled count with the correct color scheme."""
         filled = self._count
         for i, btn in enumerate(self._btns):
             btn.setChecked(i < filled)
@@ -176,14 +196,17 @@ class DeathSaveWidget(QWidget):
             btn.setStyleSheet(css)
 
     def _on_clicked(self):
+        """Recount checked buttons and refresh the display when any toggle changes."""
         filled = sum(1 for b in self._btns if b.isChecked())
         self._count = filled
         self._refresh()
 
     def value(self) -> int:
+        """Return the current number of filled (checked) circles."""
         return self._count
 
     def set_value(self, v: int):
+        """Set the filled count to v (clamped to 0–3) and refresh the buttons."""
         self._count = max(0, min(3, v))
         self._refresh()
 
@@ -192,6 +215,7 @@ class CombatStatsEditor(QDialog):
     stats_saved = pyqtSignal(dict)
 
     def __init__(self, char_data: dict, existing: dict | None = None, parent=None):
+        """Derive defaults from class/race/scores, merge with existing data, and build the UI."""
         super().__init__(parent)
         self.setWindowTitle("Section ⑤  —  Combat Stats")
         self.setMinimumSize(580, 560)
@@ -235,6 +259,7 @@ class CombatStatsEditor(QDialog):
 
     def _build_ui(self, d: dict, ac_hint: str, calc_ini: int,
                   calc_spd: int, die: int, level: int):
+        """Build the AC/initiative/speed row, HP row, hit-dice card, death-saves card, and buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 22, 28, 20)
         root.setSpacing(14)
@@ -383,11 +408,13 @@ class CombatStatsEditor(QDialog):
         root.addLayout(btn_row)
 
     def _on_recalc_hp(self):
+        """Reset Max HP and Current HP spinboxes to the class-calculated value."""
         if self._calc_hp is not None:
             self._max_hp.setValue(self._calc_hp)
             self._cur_hp.setValue(self._calc_hp)
 
     def _on_save(self):
+        """Collect all spinbox and death-save values into a dict, emit stats_saved, and close."""
         out = {
             "ac":              self._ac.value(),
             "initiative":      self._ini.value(),
@@ -405,6 +432,7 @@ class CombatStatsEditor(QDialog):
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)

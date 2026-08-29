@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/starting_equipment.py                          ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Dialog for choosing starting equipment: standard class package or  ║
+# ║  rolled/average gold. Merges selected items into the equipment tab. ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 import random
 
 from PyQt6.QtWidgets import (
@@ -221,6 +232,7 @@ def _roll_gold(cls: str) -> tuple[int, int]:
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font, and alignment."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -234,6 +246,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -270,6 +283,7 @@ class StartingEquipmentDialog(QDialog):
     equipment_chosen = pyqtSignal(list, int)   # items list, gold gp to add
 
     def __init__(self, char_data: dict, parent=None):
+        """Read class and background from char_data, initialize gold state, and build the UI."""
         super().__init__(parent)
         self.setWindowTitle("Apply Starting Equipment")
         self.setMinimumSize(560, 620)
@@ -285,6 +299,7 @@ class StartingEquipmentDialog(QDialog):
         self._build_ui()
 
     def _build_ui(self):
+        """Build the method-selector radio buttons, standard/gold panels, and Apply/Cancel buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 18, 24, 16)
         root.setSpacing(10)
@@ -351,6 +366,7 @@ class StartingEquipmentDialog(QDialog):
     # ── Standard panel ────────────────────────────────────────────────────────
 
     def _build_standard_panel(self) -> QWidget:
+        """Build the scrollable checklist of class and background items with Select All/None buttons."""
         w = QWidget()
         w.setStyleSheet("background:transparent;")
         lo = QVBoxLayout(w)
@@ -421,6 +437,7 @@ class StartingEquipmentDialog(QDialog):
         return w
 
     def _add_check(self, layout: QVBoxLayout, item: dict):
+        """Append a pre-checked QCheckBox for the given item dict to the supplied layout."""
         weight_txt = f"{item['weight']} lb  " if item['weight'] else ""
         notes_txt  = f"— {item['notes']}" if item['notes'] else ""
         qty_txt    = f"×{item['qty']}  " if item['qty'] > 1 else ""
@@ -434,6 +451,7 @@ class StartingEquipmentDialog(QDialog):
     # ── Gold panel ────────────────────────────────────────────────────────────
 
     def _build_gold_panel(self) -> QWidget:
+        """Build the roll-for-gold card showing the dice formula, Roll button, and Take Average button."""
         w = QWidget()
         w.setStyleSheet("background:transparent;")
         lo = QVBoxLayout(w)
@@ -517,22 +535,26 @@ class StartingEquipmentDialog(QDialog):
         return w
 
     def _do_roll(self, n: int, d: int, mult: int):
+        """Roll n dice of d sides, apply the multiplier, and update the displayed gold result."""
         result = sum(random.randint(1, d) for _ in range(n)) * mult
         self._set_gold(result)
 
     def _set_gold(self, gp: int):
+        """Set the current gold result to gp and update the result label."""
         self._gold_gp = gp
         self._gold_result_lbl.setText(f"{gp} gp")
 
     # ── Method toggle ─────────────────────────────────────────────────────────
 
     def _on_method_changed(self, standard: bool):
+        """Show the standard-equipment panel or the gold panel depending on the radio selection."""
         self._standard_widget.setVisible(standard)
         self._gold_widget.setVisible(not standard)
 
     # ── Apply ─────────────────────────────────────────────────────────────────
 
     def _on_apply(self):
+        """Collect checked items or gold amount and emit equipment_chosen, then close the dialog."""
         if self._radio_standard.isChecked():
             items = [item for cb, item in self._item_checks if cb.isChecked()]
             gold  = self._bg_gold
@@ -546,6 +568,7 @@ class StartingEquipmentDialog(QDialog):
 
     @staticmethod
     def _small_btn(label: str) -> QPushButton:
+        """Create a compact parchment-styled button for Select All / Select None controls."""
         btn = QPushButton(label)
         btn.setFixedHeight(26)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -559,6 +582,7 @@ class StartingEquipmentDialog(QDialog):
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)

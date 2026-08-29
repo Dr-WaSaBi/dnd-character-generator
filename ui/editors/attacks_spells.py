@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/attacks_spells.py                              ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Editor dialog for attacks/cantrips and spellcasting. Shows weapon  ║
+# ║  rows on one tab and spell-slot tracker on a second tab.            ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QFrame, QPushButton, QWidget, QTabWidget,
@@ -111,7 +122,7 @@ _WARLOCK_SLOTS = [
 
 
 def _get_slots(cls: str, level: int) -> list[int]:
-    """Return 9-element list of max slots per spell level."""
+    """Return a 9-element list of max spell slots per level for the given class and character level."""
     idx = max(0, min(level - 1, 19))
     if cls in {"Bard", "Cleric", "Druid", "Sorcerer", "Wizard"}:
         return list(_FULL_SLOTS[idx])
@@ -128,14 +139,17 @@ def _get_slots(cls: str, level: int) -> list[int]:
 
 
 def _prof_bonus(level: int) -> int:
+    """Return the proficiency bonus for the given character level."""
     return 2 + (level - 1) // 4
 
 
 def _mod(score: int) -> int:
+    """Return the D&D ability modifier for the given score: (score - 10) // 2."""
     return (score - 10) // 2
 
 
 def _fmt(val: int) -> str:
+    """Format an integer as a signed string (e.g. 3 → '+3', -1 → '-1')."""
     return f"+{val}" if val >= 0 else str(val)
 
 
@@ -143,6 +157,7 @@ def _fmt(val: int) -> str:
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font, and alignment."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -156,6 +171,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -184,11 +200,13 @@ class AttackRow(QWidget):
     remove_requested = pyqtSignal(object)
 
     def __init__(self, data: dict | None = None, parent=None):
+        """Build a single attack/cantrip row, optionally pre-filled from a data dict."""
         super().__init__(parent)
         self.setStyleSheet("background:transparent;")
         self._build(data or {})
 
     def _build(self, d: dict):
+        """Lay out name, attack bonus, damage, damage-type combo, notes, and remove button fields."""
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 2, 0, 2)
         row.setSpacing(6)
@@ -244,6 +262,7 @@ class AttackRow(QWidget):
         row.addWidget(rm)
 
     def to_dict(self) -> dict:
+        """Return a dict representation of this attack row's field values."""
         dtype = self._dtype.currentText()
         return {
             "name":         self._name.text().strip(),
@@ -260,6 +279,7 @@ class AttacksSpellsEditor(QDialog):
     data_saved = pyqtSignal(dict)
 
     def __init__(self, char_data: dict, existing: dict | None = None, parent=None):
+        """Derive spell stats from char_data, load any existing attacks/slots, and build the tabbed UI."""
         super().__init__(parent)
         self.setWindowTitle("Section ⑥  —  Attacks & Spellcasting")
         self.setMinimumSize(640, 580)
@@ -287,6 +307,7 @@ class AttacksSpellsEditor(QDialog):
         self._build_ui()
 
     def _build_ui(self):
+        """Build the title, tabbed Attacks/Spellcasting widget, and Save/Cancel buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(22, 18, 22, 18)
         root.setSpacing(10)
@@ -327,6 +348,7 @@ class AttacksSpellsEditor(QDialog):
     # ── Attacks tab ───────────────────────────────────────────────────────────
 
     def _build_attacks_tab(self) -> QWidget:
+        """Build the attacks tab with column headers, a scrollable row list, and an Add button."""
         w = QWidget()
         w.setStyleSheet(f"background:{COLOR_PARCHMENT};")
         lo = QVBoxLayout(w)
@@ -397,6 +419,7 @@ class AttacksSpellsEditor(QDialog):
         return w
 
     def _add_attack_row(self, data: dict | None = None):
+        """Append a new AttackRow to the scrollable list, optionally pre-filled with data."""
         row = AttackRow(data)
         row.remove_requested.connect(self._remove_attack_row)
         self._attack_rows.append(row)
@@ -405,6 +428,7 @@ class AttacksSpellsEditor(QDialog):
             self._attacks_layout.count() - 1, row)
 
     def _remove_attack_row(self, row: AttackRow):
+        """Remove an AttackRow from the layout and internal list when its remove button is clicked."""
         self._attacks_layout.removeWidget(row)
         row.deleteLater()
         self._attack_rows.remove(row)
@@ -412,6 +436,7 @@ class AttacksSpellsEditor(QDialog):
     # ── Spells tab ────────────────────────────────────────────────────────────
 
     def _build_spells_tab(self) -> QWidget:
+        """Build the spellcasting tab with stat cards and a spell-slot tracker grid (or non-caster notice)."""
         w = QWidget()
         w.setStyleSheet(f"background:{COLOR_PARCHMENT};")
         lo = QVBoxLayout(w)
@@ -541,6 +566,7 @@ class AttacksSpellsEditor(QDialog):
     # ── Save ──────────────────────────────────────────────────────────────────
 
     def _on_save(self):
+        """Collect attacks and used spell-slot counts, emit data_saved, and close the dialog."""
         attacks = [r.to_dict() for r in self._attack_rows if r.to_dict()["name"]]
 
         used_list = [0] * 9
@@ -563,6 +589,7 @@ class AttacksSpellsEditor(QDialog):
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)

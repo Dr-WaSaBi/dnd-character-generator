@@ -1,0 +1,4 @@
+#!/bin/sh
+# Tracked copy of the pre-commit hook.
+# Run scripts/install_hooks.py to install this into .git/hooks/pre-commit.
+python scripts/bump_version.py

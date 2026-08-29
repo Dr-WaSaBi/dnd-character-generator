@@ -1,3 +1,15 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/dice_roller.py                                         ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Sidebar dice roller panel. Handles manual NdX rolls and weapon      ║
+# ║  attack rolls (d20 + attack bonus, damage dice) with a scrolling     ║
+# ║  card log that highlights crits and natural 1s.                      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 import re
 import random
 
@@ -29,6 +41,7 @@ _GRN = "#1a6b1a"
 
 def _lbl(text, color=_CT, sz=8, bold=False, fam=FONT_BODY,
          align=Qt.AlignmentFlag.AlignLeft, wrap=False) -> QLabel:
+    """Create a styled QLabel with the given text, color, size, weight, and alignment."""
     w = QLabel(str(text))
     w.setAlignment(align)
     w.setWordWrap(wrap)
@@ -41,6 +54,7 @@ def _lbl(text, color=_CT, sz=8, bold=False, fam=FONT_BODY,
 
 
 def _hrule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFixedHeight(1)
     f.setStyleSheet(f"background:{_CG};border:none;")
@@ -48,6 +62,7 @@ def _hrule() -> QFrame:
 
 
 def _parse_bonus(s) -> int:
+    """Parse a string like '+5' or '-2' into an integer, returning 0 on failure."""
     try:
         return int(str(s).strip().replace(" ", ""))
     except (ValueError, TypeError):
@@ -55,7 +70,7 @@ def _parse_bonus(s) -> int:
 
 
 def _parse_damage(s: str) -> tuple[int, int, int]:
-    """Parse '2d6+3' → (num_dice, sides, modifier)."""
+    """Parse a damage expression like '2d6+3' into (num_dice, sides, modifier)."""
     s = str(s).strip().lower()
     m = re.match(r'(\d*)d(\d+)\s*([+-]\s*\d+)?', s)
     if not m:
@@ -71,6 +86,7 @@ class DiceRollerPanel(QFrame):
     _MAX_LOG = 100
 
     def __init__(self, parent=None):
+        """Set up the panel frame and build all child widgets."""
         super().__init__(parent)
         self.setObjectName("drp")
         self.setStyleSheet(
@@ -85,6 +101,7 @@ class DiceRollerPanel(QFrame):
     # ── Construction ──────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        """Build the Quick Roll control card, log header with Clear button, and scrollable roll log."""
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -208,6 +225,7 @@ class DiceRollerPanel(QFrame):
     # ── Public rolling API ────────────────────────────────────────────────────
 
     def manual_roll(self):
+        """Read the count spinner and die selector, roll the dice, and add a card to the log."""
         count = self._count_spin.value()
         die   = self._die_combo.currentText()
         sides = int(die[1:])
@@ -215,7 +233,7 @@ class DiceRollerPanel(QFrame):
         self._add_manual_card(count, sides, rolls)
 
     def weapon_attack(self, name: str, atk_bonus: str, damage: str):
-        """Roll d20 attack + damage for a weapon. Called by clicking a weapon row."""
+        """Roll d20 + attack bonus and damage dice for a weapon, then push the result card. Called by clicking a weapon row."""
         atk_mod = _parse_bonus(atk_bonus)
         d20     = random.randint(1, 20)
         nat20   = d20 == 20
@@ -239,6 +257,7 @@ class DiceRollerPanel(QFrame):
     # ── Card builders ─────────────────────────────────────────────────────────
 
     def _add_manual_card(self, count: int, sides: int, rolls: list[int]):
+        """Build a roll-log card for a manual NdX roll, with crit/nat-1 highlighting."""
         self._entry_count += 1
         label = f"{count}d{sides}"
         total = sum(rolls)
@@ -287,6 +306,7 @@ class DiceRollerPanel(QFrame):
     def _add_weapon_card(self, *, name, atk_mod, d20, atk_tot,
                          nat20, nat1, dmg_rolls, dmg_sides,
                          dmg_mod, dmg_total):
+        """Build a roll-log card showing the attack roll result and damage breakdown for a weapon."""
         self._entry_count += 1
 
         if nat20:
@@ -333,6 +353,7 @@ class DiceRollerPanel(QFrame):
         self._push_card(card)
 
     def _make_card(self, bg: str, border: str) -> QFrame:
+        """Create a styled QFrame card with the given background and border color."""
         card = QFrame()
         card.setStyleSheet(
             f"QFrame{{background:{bg};border:1.5px solid {border};border-radius:4px;}}"
@@ -343,7 +364,7 @@ class DiceRollerPanel(QFrame):
         return card
 
     def _push_card(self, card: QFrame):
-        """Insert newest card at top (index 0), trim oldest if over limit."""
+        """Insert the newest card at the top of the log and trim the oldest if over _MAX_LOG."""
         self._log_lo.insertWidget(0, card)
         # Trim oldest entries (index count-2 is oldest card; count-1 is stretch)
         while self._log_lo.count() - 1 > self._MAX_LOG:
@@ -352,6 +373,7 @@ class DiceRollerPanel(QFrame):
                 w.deleteLater()
 
     def _clear_log(self):
+        """Remove all cards from the log and reset the entry counter."""
         while self._log_lo.count() > 1:
             item = self._log_lo.takeAt(0)
             if w := item.widget():

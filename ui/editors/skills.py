@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/skills.py                                      ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Editor dialog for the 18 D&D 5e skill proficiencies. Auto-applies  ║
+# ║  class and background skills; distinguishes them with color coding.  ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QScrollArea,
     QLabel, QFrame, QPushButton, QWidget,
@@ -70,19 +81,23 @@ BACKGROUND_SKILLS: dict[str, list[str]] = {
 
 
 def _prof_bonus(level: int) -> int:
+    """Return the proficiency bonus for the given character level."""
     return 2 + (level - 1) // 4
 
 
 def _mod(score: int) -> int:
+    """Return the D&D ability modifier for the given score: (score - 10) // 2."""
     return (score - 10) // 2
 
 
 def _fmt(val: int) -> str:
+    """Format an integer as a signed string (e.g. 3 → '+3', -1 → '-1')."""
     return f"+{val}" if val >= 0 else str(val)
 
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font, and alignment."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -96,6 +111,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -129,6 +145,7 @@ class SkillRow(QWidget):
     def __init__(self, skill: str, ability: str, score: int | None,
                  prof: bool, from_bg: bool, in_class_pool: bool,
                  prof_bonus: int, parent=None):
+        """Build a single skill row, storing proficiency source (class vs background) for color coding."""
         super().__init__(parent)
         self.skill = skill
         self._ability = ability
@@ -141,6 +158,7 @@ class SkillRow(QWidget):
         self._build()
 
     def _build(self):
+        """Lay out the proficiency toggle, skill name, governing ability, score, arrow, and bonus label."""
         row = QHBoxLayout(self)
         row.setContentsMargins(6, 3, 6, 3)
         row.setSpacing(10)
@@ -178,16 +196,19 @@ class SkillRow(QWidget):
         row.addStretch()
 
     def _btn_style(self) -> str:
+        """Return the appropriate button stylesheet: red for class prof, green for background, grey for none."""
         if not self._prof:
             return self._BTN_OFF
         return self._BTN_BG if self._from_bg else self._BTN_CLASS
 
     def _calc_bonus(self) -> str:
+        """Compute and return the formatted skill bonus (ability modifier + proficiency bonus if proficient)."""
         if self._score is None:
             return "—"
         return _fmt(_mod(self._score) + (self._prof_bonus if self._prof else 0))
 
     def _on_toggle(self):
+        """Toggle proficiency, clear the background-source flag if turned off, and refresh the bonus label."""
         self._prof = not self._prof
         # if manually toggled off a bg skill, it's no longer "from bg"
         if not self._prof:
@@ -198,9 +219,11 @@ class SkillRow(QWidget):
         self.toggled.emit(self.skill, self._prof)
 
     def is_proficient(self) -> bool:
+        """Return True if this skill currently has proficiency."""
         return self._prof
 
     def update_score(self, score: int | None):
+        """Update the underlying ability score and refresh the displayed bonus."""
         self._score = score
         self._score_lbl.setText(str(score) if score is not None else "—")
         self._bonus_lbl.setText(self._calc_bonus())
@@ -210,6 +233,7 @@ class SkillsEditor(QDialog):
     skills_saved = pyqtSignal(dict)   # {"Acrobatics": True, "Athletics": False, ...}
 
     def __init__(self, char_data: dict, existing: dict | None = None, parent=None):
+        """Initialize the dialog, derive class/background skill defaults from char_data, and build the UI."""
         super().__init__(parent)
         self.setWindowTitle("Section ④  —  Skills")
         self.setMinimumSize(460, 620)
@@ -257,6 +281,7 @@ class SkillsEditor(QDialog):
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        """Build the info strip, slot counter, legend, scrollable skill rows, and Save/Cancel buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 22, 28, 20)
         root.setSpacing(10)
@@ -377,6 +402,7 @@ class SkillsEditor(QDialog):
     # ── Slot counter ──────────────────────────────────────────────────────────
 
     def _update_slot_label(self):
+        """Refresh the class-pick counter label, showing how many of the allowed picks are used."""
         if not self._cls or self._num_picks == 0:
             self._slot_lbl.setText("") if hasattr(self, '_slot_lbl') else None
             return
@@ -396,18 +422,21 @@ class SkillsEditor(QDialog):
     # ── Events ────────────────────────────────────────────────────────────────
 
     def _on_row_toggled(self, skill: str, prof: bool):
+        """Update the internal proficiency map and refresh the slot counter when a row is toggled."""
         self._proficiencies[skill] = prof
         self._update_slot_label()
 
     # ── Save ─────────────────────────────────────────────────────────────────
 
     def _on_save(self):
+        """Collect proficiency state from all skill rows, emit skills_saved, and close the dialog."""
         out = {s: self._rows[s].is_proficient() for s, _ in SKILLS}
         self.skills_saved.emit(out)
         self.accept()
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)

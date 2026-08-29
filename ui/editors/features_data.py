@@ -1,10 +1,16 @@
-"""
-D&D 5e SRD feature data for auto-populating the Features & Traits editor.
-
-CLASS_FEATURES:  class name -> list of (min_level, feature_name, description)
-RACE_TRAITS:     race name  -> list of (trait_name, description)
-BACKGROUND_FEATURES: background -> (feature_name, description)
-"""
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/features_data.py                               ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Static SRD data for class features, racial traits, and background  ║
+# ║  features; consumed by features.py to auto-populate the editor.    ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+# CLASS_FEATURES:  class name -> list of (min_level, feature_name, description)
+# RACE_TRAITS:     race name  -> list of (trait_name, description)
+# BACKGROUND_FEATURES: background -> (feature_name, description)
 
 # ---------------------------------------------------------------------------
 # CLASS FEATURES

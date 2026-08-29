@@ -1,6 +1,13 @@
-"""
-PDF export — two-page D&D 5e character sheet via reportlab.
-"""
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/pdf_export.py                                          ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Two-page PDF character sheet generator using reportlab. Page 1      ║
+# ║  shows the full combat sheet; page 2 shows features and proficiencies.║
+# ╚══════════════════════════════════════════════════════════════════════╝
 
 import os
 from reportlab.lib.pagesizes import LETTER
@@ -44,18 +51,22 @@ C3_W = C4_X - C3_X - 4
 # Helpers
 # ---------------------------------------------------------------------------
 def _mod(score: int) -> int:
+    """Return the D&D ability modifier for the given score: (score - 10) // 2."""
     return (score - 10) // 2
 
 
 def _fmt(val: int) -> str:
+    """Format an integer as a signed string (e.g. 3 → '+3', -1 → '-1')."""
     return f"+{val}" if val >= 0 else str(val)
 
 
 def _prof(level: int) -> int:
+    """Return the proficiency bonus for the given character level."""
     return (max(1, level) - 1) // 4 + 2
 
 
 def _wrap(text: str, max_chars: int) -> list[str]:
+    """Word-wrap text into lines of at most max_chars characters, splitting on spaces."""
     words = (text or "").split()
     lines, cur = [], ""
     for w in words:
@@ -74,31 +85,37 @@ def _wrap(text: str, max_chars: int) -> list[str]:
 # ---------------------------------------------------------------------------
 class Sheet:
     def __init__(self, c: rl_canvas.Canvas):
+        """Store the reportlab canvas for use by all drawing methods."""
         self.c = c
 
     def bg(self):
+        """Fill the entire page with the parchment background color."""
         self.c.setFillColor(C_PARCHMENT)
         self.c.rect(0, 0, PW, PH, fill=1, stroke=0)
 
     def rbox(self, x, y, w, h, r=4, fill=C_DARK, stroke=C_BORDER, lw=0.7):
+        """Draw a filled, stroked rounded rectangle."""
         self.c.setStrokeColor(stroke)
         self.c.setLineWidth(lw)
         self.c.setFillColor(fill)
         self.c.roundRect(x, y, w, h, r, fill=1, stroke=1)
 
     def box(self, x, y, w, h, fill=C_WHITE, stroke=C_BORDER, lw=0.7):
+        """Draw a filled, stroked axis-aligned rectangle."""
         self.c.setStrokeColor(stroke)
         self.c.setLineWidth(lw)
         self.c.setFillColor(fill)
         self.c.rect(x, y, w, h, fill=1, stroke=1)
 
     def circle(self, cx, cy, r, fill=C_WHITE, stroke=C_BORDER, lw=0.7):
+        """Draw a filled, stroked circle centered at (cx, cy) with radius r."""
         self.c.setStrokeColor(stroke)
         self.c.setLineWidth(lw)
         self.c.setFillColor(fill)
         self.c.circle(cx, cy, r, fill=1, stroke=1)
 
     def diamond(self, cx, cy, hw, hh, fill=C_WHITE, stroke=C_BORDER, lw=1.0):
+        """Draw a diamond (rotated square) centered at (cx, cy) with given half-widths."""
         p = self.c.beginPath()
         p.moveTo(cx, cy + hh)
         p.lineTo(cx + hw, cy)
@@ -111,11 +128,13 @@ class Sheet:
         self.c.drawPath(p, fill=1, stroke=1)
 
     def rule(self, x, y, w, color=C_GOLD, lw=0.8):
+        """Draw a horizontal rule from (x, y) to (x+w, y) in the given color."""
         self.c.setStrokeColor(color)
         self.c.setLineWidth(lw)
         self.c.line(x, y, x + w, y)
 
     def txt(self, x, y, s, size=8, color=C_TEXT, bold=False, align="left"):
+        """Draw text at (x, y) with the given size, color, weight, and alignment."""
         self.c.setFillColor(color)
         self.c.setFont("Helvetica-Bold" if bold else "Helvetica", size)
         s = str(s)
@@ -128,6 +147,7 @@ class Sheet:
 
 
 def _sec_hdr(s: Sheet, x, y, w, title: str, h=12):
+    """Draw a red rounded section header banner and return the y coordinate just below it."""
     s.c.setFillColor(C_RED)
     s.c.setStrokeColor(C_RED)
     s.c.roundRect(x, y, w, h, 3, fill=1, stroke=0)
@@ -148,7 +168,7 @@ SAVE_ABBRS = ["STR", "DEX", "CON", "INT", "WIS", "CHA"]
 
 
 def _ability_col(s: Sheet, scores: dict, y_top: float) -> float:
-    """Draw ability score boxes. Returns y of bottom."""
+    """Draw the six ability score boxes in column 1 and return the y coordinate of the bottom."""
     _sec_hdr(s, C1_X, y_top, C1_W, "Ability Scores")
     y = y_top - 2
 
@@ -182,7 +202,7 @@ def _ability_col(s: Sheet, scores: dict, y_top: float) -> float:
 # ---------------------------------------------------------------------------
 def _saves_col(s: Sheet, throws: dict, scores: dict,
                prof_bonus: int, y_top: float) -> float:
-    """Draw inspiration, prof bonus, saving throws. Returns y of bottom."""
+    """Draw the inspiration circle, proficiency bonus box, and six saving throw rows. Returns y of bottom."""
 
     # Inspiration
     s.circle(C2_X + 8, y_top - 8, 5, fill=C_WHITE)
@@ -251,6 +271,7 @@ SKILLS = [
 
 def _skills_col(s: Sheet, skills: dict, scores: dict,
                 prof_bonus: int, y_top: float) -> float:
+    """Draw the 18-skill list with proficiency dots and computed bonuses. Returns y of bottom."""
     sk_top = y_top - 12
     _sec_hdr(s, C2_X, sk_top, C2_W, "Skills")
     y = sk_top - 2
@@ -277,6 +298,7 @@ def _skills_col(s: Sheet, skills: dict, scores: dict,
 # COMBAT STATS  (column 3 top)
 # ---------------------------------------------------------------------------
 def _combat_col(s: Sheet, combat: dict, info: dict, y_top: float) -> float:
+    """Draw AC, initiative, speed, HP bars, hit dice, and death saves. Returns y of bottom."""
     level  = info.get("level", 1) or 1
     cls    = info.get("class", "")
 
@@ -369,6 +391,7 @@ def _combat_col(s: Sheet, combat: dict, info: dict, y_top: float) -> float:
           size=6, color=C_SUBTEXT, align="center")
 
     def _ds_row(label, count, filled, ry, dot_color):
+        """Draw a death save row with a label and three filled/hollow dots."""
         s.txt(dsx + 4, ry, label, size=6, color=C_TEXT)
         for j in range(3):
             fill = dot_color if j < filled else C_WHITE
@@ -385,6 +408,7 @@ def _combat_col(s: Sheet, combat: dict, info: dict, y_top: float) -> float:
 # ATTACKS & SPELLCASTING  (column 3 middle)
 # ---------------------------------------------------------------------------
 def _attacks_col(s: Sheet, attacks: dict, y_top: float) -> float:
+    """Draw the attacks table with column headers, up to 8 weapon rows, and optional spell stats. Returns y of bottom."""
     y = _sec_hdr(s, C3_X, y_top, C3_W, "Attacks & Spellcasting")
 
     atk_list = attacks.get("attacks", [])
@@ -435,6 +459,7 @@ COIN_KEYS = [("CP", "CP"), ("SP", "SP"), ("EP", "EP"),
 
 
 def _equipment_col(s: Sheet, equip: dict, y_top: float) -> float:
+    """Draw the currency row and up to 14 equipment items, then border the whole section. Returns y of bottom."""
     y = _sec_hdr(s, C3_X, y_top, C3_W, "Equipment & Currency")
 
     currency = equip.get("currency", {})
@@ -487,6 +512,7 @@ PERS_FIELDS = [
 
 
 def _personality_col(s: Sheet, pers: dict, y_top: float) -> float:
+    """Draw the four personality text boxes (traits, ideals, bonds, flaws) stacked in column 4. Returns y of bottom."""
     y = y_top
     BOX_H = (y_top - M - 14) / 4 - 4   # divide available height into 4
 
@@ -513,6 +539,7 @@ def _personality_col(s: Sheet, pers: dict, y_top: float) -> float:
 # HEADER  (top of page)
 # ---------------------------------------------------------------------------
 def _header(s: Sheet, info: dict):
+    """Draw the character name, gold rule, and two rows of identity fields at the top of the page."""
     x   = M
     w   = PW - 2 * M
     top = PH - M
@@ -562,6 +589,7 @@ def _header(s: Sheet, info: dict):
 # PAGE 1
 # ---------------------------------------------------------------------------
 def _page1(s: Sheet, d: dict):
+    """Render page 1: parchment background, header, and all four content columns."""
     s.bg()
 
     info    = d.get("character_info", {})
@@ -603,6 +631,7 @@ def _page1(s: Sheet, d: dict):
 # PAGE 2  — Features & Proficiencies
 # ---------------------------------------------------------------------------
 def _page2(s: Sheet, d: dict):
+    """Render page 2: features list on the left and proficiency categories on the right."""
     s.bg()
 
     info     = d.get("character_info", {})
@@ -671,6 +700,7 @@ def _page2(s: Sheet, d: dict):
 # Entry point
 # ---------------------------------------------------------------------------
 def export_pdf(char_data: dict, path: str):
+    """Create a two-page PDF at path using the supplied character data dict."""
     c = rl_canvas.Canvas(path, pagesize=LETTER)
     sh = Sheet(c)
     _page1(sh, char_data)

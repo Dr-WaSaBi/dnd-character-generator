@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/personality.py                                 ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Editor dialog for the four personality fields (traits, ideals,      ║
+# ║  bonds, flaws). Each field is a free-text QTextEdit.                 ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QPushButton, QTextEdit,
@@ -27,6 +38,7 @@ FIELDS = [
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font family/size, and optional weight/italic."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -40,6 +52,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -60,6 +73,7 @@ class PersonalityEditor(QDialog):
     data_saved = pyqtSignal(dict)
 
     def __init__(self, existing: dict | None = None, parent=None):
+        """Initialize the dialog, load any existing personality data, and build the UI."""
         super().__init__(parent)
         self.setWindowTitle("Section ⑧  —  Personality")
         self.setMinimumSize(560, 560)
@@ -69,6 +83,7 @@ class PersonalityEditor(QDialog):
         self._build_ui(existing or {})
 
     def _build_ui(self, data: dict):
+        """Build the four personality text editors with section banners, and Save/Cancel buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(26, 20, 26, 18)
         root.setSpacing(10)
@@ -104,12 +119,14 @@ class PersonalityEditor(QDialog):
         root.addLayout(btn_row)
 
     def _on_save(self):
+        """Collect plain text from all four editors, emit data_saved, and close the dialog."""
         out = {key: self._editors[key].toPlainText().strip() for key, _, _ in FIELDS}
         self.data_saved.emit(out)
         self.accept()
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)

@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/equipment.py                                   ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Editor dialog for carried gear and currency. Each item row tracks  ║
+# ║  name, qty, weight, notes, and an equipped/worn toggle.             ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QPushButton, QWidget,
@@ -7,10 +18,12 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 # imported lazily to avoid circular import
 def _open_starting_dialog(char_data: dict, parent) -> "StartingEquipmentDialog":
+    """Lazily import and return a new StartingEquipmentDialog to avoid circular imports."""
     from ui.editors.starting_equipment import StartingEquipmentDialog
     return StartingEquipmentDialog(char_data=char_data, parent=parent)
 
 def _open_item_picker(parent) -> "ItemPickerDialog":
+    """Lazily import and return a new ItemPickerDialog to avoid circular imports."""
     from ui.editors.item_picker import ItemPickerDialog
     return ItemPickerDialog(parent=parent)
 
@@ -36,6 +49,7 @@ COIN_LABELS = {
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font, and alignment."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -49,6 +63,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -81,11 +96,13 @@ class ItemRow(QWidget):
     changed = pyqtSignal()
 
     def __init__(self, data: dict | None = None, parent=None):
+        """Build a single item row with name, qty, weight, notes, equipped toggle, and remove button."""
         super().__init__(parent)
         self.setStyleSheet("background:transparent;")
         self._build(data or {})
 
     def _build(self, d: dict):
+        """Lay out the name, qty, weight, notes, equipped checkbox, and remove button fields."""
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 2, 0, 2)
         row.setSpacing(6)
@@ -156,6 +173,7 @@ class ItemRow(QWidget):
         row.addWidget(rm)
 
     def to_dict(self) -> dict:
+        """Return a dict representation of this item row's field values."""
         return {
             "name":     self._name.text().strip(),
             "qty":      self._qty.value(),
@@ -165,6 +183,7 @@ class ItemRow(QWidget):
         }
 
     def total_weight(self) -> float:
+        """Return qty × weight for this row (used for the running total display)."""
         return self._qty.value() * self._weight.value()
 
 
@@ -173,6 +192,7 @@ class EquipmentEditor(QDialog):
 
     def __init__(self, char_data: dict | None = None,
                  existing: dict | None = None, parent=None):
+        """Initialize with optional char_data (for starting-equipment dialog) and any saved items/currency."""
         super().__init__(parent)
         self.setWindowTitle("Section ⑦  —  Equipment & Currency")
         self.setMinimumSize(600, 580)
@@ -186,6 +206,7 @@ class EquipmentEditor(QDialog):
         self._build_ui()
 
     def _build_ui(self):
+        """Build the item list with headers, currency cards, weight total, and Save/Cancel buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 18)
         root.setSpacing(10)
@@ -337,6 +358,7 @@ class EquipmentEditor(QDialog):
     # ── Item rows ─────────────────────────────────────────────────────────────
 
     def _add_item_row(self, data: dict | None = None):
+        """Append a new ItemRow, connect its signals, and refresh the weight total."""
         row = ItemRow(data)
         row.remove_requested.connect(self._remove_item_row)
         row.changed.connect(self._update_weight)
@@ -345,26 +367,31 @@ class EquipmentEditor(QDialog):
         self._update_weight()
 
     def _remove_item_row(self, row: ItemRow):
+        """Remove an ItemRow from the layout and update the weight total."""
         self._items_layout.removeWidget(row)
         row.deleteLater()
         self._item_rows.remove(row)
         self._update_weight()
 
     def _on_pick_item(self):
+        """Open the ItemPickerDialog and connect its items_chosen signal."""
         dlg = _open_item_picker(self)
         dlg.items_chosen.connect(self._apply_picked_items)
         dlg.exec()
 
     def _apply_picked_items(self, items: list):
+        """Add each item returned from the picker dialog as a new item row."""
         for item in items:
             self._add_item_row(item)
 
     def _on_starting_equipment(self):
+        """Open the StartingEquipmentDialog and connect its equipment_chosen signal."""
         dlg = _open_starting_dialog(self._char_data, self)
         dlg.equipment_chosen.connect(self._apply_starting_equipment)
         dlg.exec()
 
     def _apply_starting_equipment(self, items: list, gold_gp: int):
+        """Add starting equipment items as rows and credit any background gold to the GP spinner."""
         for item in items:
             self._add_item_row(item)
         if gold_gp:
@@ -372,12 +399,14 @@ class EquipmentEditor(QDialog):
             self._coin_spins["GP"].setValue(current + gold_gp)
 
     def _update_weight(self):
+        """Recalculate and display the total carry weight across all item rows."""
         total = sum(r.total_weight() for r in self._item_rows)
         self._weight_lbl.setText(f"Total weight: {total:.1f} lb")
 
     # ── Currency ──────────────────────────────────────────────────────────────
 
     def _update_gp_total(self):
+        """Recalculate and display the total GP-equivalent value from all coin spinners."""
         total = sum(
             self._coin_spins[c].value() * COIN_TO_GP[c]
             for c in COIN_LABELS
@@ -387,6 +416,7 @@ class EquipmentEditor(QDialog):
     # ── Save ──────────────────────────────────────────────────────────────────
 
     def _on_save(self):
+        """Collect item rows and coin values into a dict, emit data_saved, and close the dialog."""
         items = [r.to_dict() for r in self._item_rows if r.to_dict()["name"]]
         currency = {c: self._coin_spins[c].value() for c in COIN_LABELS}
         self.data_saved.emit({"items": items, "currency": currency})
@@ -394,6 +424,7 @@ class EquipmentEditor(QDialog):
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)

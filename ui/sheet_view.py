@@ -1,7 +1,14 @@
-"""
-SheetView — 4-column character sheet layout replacing the section card list.
-Each panel is clickable (opens its editor) and refreshes when data changes.
-"""
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/sheet_view.py                                          ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Full 4-column character sheet layout. Each section panel is         ║
+# ║  clickable to open its editor and refreshes live when data changes.  ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QVBoxLayout, QGridLayout,
     QLabel, QScrollArea, QSizePolicy,
@@ -44,16 +51,20 @@ SKILL_LIST = [
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _m(s: int) -> int:
+    """Return the D&D ability modifier for a score: (score - 10) // 2."""
     return (s - 10) // 2
 
 def _f(v: int) -> str:
+    """Format an integer as a signed string (e.g. 3 → '+3', -1 → '-1')."""
     return f"+{v}" if v >= 0 else str(v)
 
 def _pb(lvl: int) -> int:
+    """Return the proficiency bonus for the given character level."""
     return (max(1, lvl) - 1) // 4 + 2
 
 def _lbl(text, color=CT, sz=8, bold=False, fam=FONT_BODY,
          align=Qt.AlignmentFlag.AlignLeft, wrap=False) -> QLabel:
+    """Create a styled QLabel with the given text, color, font size, weight, and alignment."""
     w = QLabel(str(text))
     w.setAlignment(align)
     w.setWordWrap(wrap)
@@ -65,6 +76,7 @@ def _lbl(text, color=CT, sz=8, bold=False, fam=FONT_BODY,
     return w
 
 def _hrule() -> QFrame:
+    """Return a 1px gold horizontal rule widget used as a visual section divider."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -72,6 +84,7 @@ def _hrule() -> QFrame:
     return f
 
 def _dot(filled: bool, color: str = CR) -> QWidget:
+    """Return a 9×9 filled or hollow dot widget used for proficiency and death-save indicators."""
     d = QWidget()
     d.setFixedSize(9, 9)
     d.setStyleSheet(
@@ -81,7 +94,7 @@ def _dot(filled: bool, color: str = CR) -> QWidget:
     return d
 
 def _stat_box(value: str, label: str, fixed_h=52, circle=False) -> QFrame:
-    """A white stat box with value (large) and label (small, bottom)."""
+    """Return a white bordered stat box showing a large value and a small caption beneath it."""
     f = QFrame()
     r = "26px" if circle else "4px"
     f.setStyleSheet(f"QFrame{{background:{CW};border:2px solid {CB};border-radius:{r};}}")
@@ -97,6 +110,7 @@ def _stat_box(value: str, label: str, fixed_h=52, circle=False) -> QFrame:
     return f
 
 def _mini_box(value: str, label: str) -> QFrame:
+    """Return a compact stat box (36px tall) used for current HP, temp HP, and similar fields."""
     f = QFrame()
     f.setStyleSheet(f"QFrame{{background:{CW};border:1px solid {CB};border-radius:3px;}}")
     f.setFixedHeight(36)
@@ -117,6 +131,7 @@ class SectionPanel(QFrame):
     clicked = pyqtSignal(int)
 
     def __init__(self, number: int, title: str, parent=None):
+        """Create a numbered, titled section panel with a red header bar and a parchment body."""
         super().__init__(parent)
         self._n = number
         self.setObjectName("sp")
@@ -147,12 +162,14 @@ class SectionPanel(QFrame):
         root.addWidget(self._body, 1)
 
     def _set_style(self, hover: bool):
+        """Apply the normal or hover border/background style to the outer frame."""
         if hover:
             self.setStyleSheet(f"QFrame#sp{{background:{CPH};border:2px solid {CG};border-radius:5px;}}")
         else:
             self.setStyleSheet(f"QFrame#sp{{background:{CP};border:1.5px solid {CB};border-radius:5px;}}")
 
     def _set_hdr(self, hover: bool):
+        """Apply the normal or hover color to the red header bar label."""
         bg = CRH if hover else CR
         self._hdr.setStyleSheet(
             f"background:{bg};color:{CW};font-family:{FONT_HEADER};font-size:7pt;"
@@ -160,30 +177,36 @@ class SectionPanel(QFrame):
         )
 
     def _clear(self):
+        """Remove and destroy all widgets from the body layout to prepare for a refresh."""
         while self._blo.count():
             item = self._blo.takeAt(0)
             if w := item.widget():
                 w.deleteLater()
 
     def _add(self, w, stretch=0):
+        """Add a widget to the body layout with optional stretch factor."""
         self._blo.addWidget(w, stretch)
 
     def mousePressEvent(self, e):
+        """Emit clicked(section_number) on a left-button press."""
         if e.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._n)
         super().mousePressEvent(e)
 
     def enterEvent(self, e):
+        """Switch to hover styling when the mouse enters the panel."""
         self._set_style(True)
         self._set_hdr(True)
         super().enterEvent(e)
 
     def leaveEvent(self, e):
+        """Restore normal styling when the mouse leaves the panel."""
         self._set_style(False)
         self._set_hdr(False)
         super().leaveEvent(e)
 
     def refresh(self, char_data: dict):
+        """Override in subclasses to rebuild the body from character data."""
         pass
 
 
@@ -193,6 +216,7 @@ class CharInfoPanel(QFrame):
     clicked = pyqtSignal(int)
 
     def __init__(self, parent=None):
+        """Build the full-width character identity header with name, class, race, and alignment rows."""
         super().__init__(parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setStyleSheet(f"QFrame{{background:{CPD};border:2px solid {CB};border-radius:5px;}}")
@@ -226,6 +250,7 @@ class CharInfoPanel(QFrame):
         lo.addWidget(hint)
 
     def _field(self, label: str, value: str) -> QWidget:
+        """Return a small label:value pair widget for the info rows."""
         w = QWidget()
         w.setStyleSheet("background:transparent;border:none;")
         lo = QHBoxLayout(w)
@@ -236,6 +261,7 @@ class CharInfoPanel(QFrame):
         return w
 
     def refresh(self, char_data: dict):
+        """Update the name label and info rows from the character_info section of char_data."""
         info = char_data.get("character_info", {})
         name = info.get("character_name") or info.get("name") or "Unnamed Hero"
         self._name.setText(name)
@@ -266,15 +292,18 @@ class CharInfoPanel(QFrame):
         self._r2lo.addStretch()
 
     def mousePressEvent(self, e):
+        """Emit clicked(1) on a left-button press to open the character info editor."""
         if e.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(1)
         super().mousePressEvent(e)
 
     def enterEvent(self, e):
+        """Highlight the panel border gold on mouse enter."""
         self.setStyleSheet(f"QFrame{{background:{CPH};border:2px solid {CG};border-radius:5px;}}")
         super().enterEvent(e)
 
     def leaveEvent(self, e):
+        """Restore the normal border on mouse leave."""
         self.setStyleSheet(f"QFrame{{background:{CPD};border:2px solid {CB};border-radius:5px;}}")
         super().leaveEvent(e)
 
@@ -283,9 +312,11 @@ class CharInfoPanel(QFrame):
 
 class AbilityPanel(SectionPanel):
     def __init__(self, parent=None):
+        """Initialize the Ability Scores panel (section 2)."""
         super().__init__(2, "Ability Scores", parent)
 
     def refresh(self, char_data: dict):
+        """Rebuild the 2×3 grid of ability score cells from the ability_scores data."""
         self._clear()
         scores = char_data.get("ability_scores", {})
 
@@ -330,9 +361,11 @@ class AbilityPanel(SectionPanel):
 
 class SavesPanel(SectionPanel):
     def __init__(self, parent=None):
+        """Initialize the Saving Throws panel (section 3)."""
         super().__init__(3, "Saving Throws", parent)
 
     def refresh(self, char_data: dict):
+        """Rebuild the saving throw rows with proficiency dots, computed bonuses, and passive perception."""
         self._clear()
         throws = char_data.get("saving_throws", {})
         scores = char_data.get("ability_scores", {})
@@ -385,9 +418,11 @@ class SavesPanel(SectionPanel):
 
 class SkillsPanel(SectionPanel):
     def __init__(self, parent=None):
+        """Initialize the Skills panel (section 4)."""
         super().__init__(4, "Skills", parent)
 
     def refresh(self, char_data: dict):
+        """Rebuild the 18-skill list with alternating row colors, proficiency dots, and computed bonuses."""
         self._clear()
         skills = char_data.get("skills", {})
         scores = char_data.get("ability_scores", {})
@@ -417,9 +452,11 @@ class SkillsPanel(SectionPanel):
 
 class CombatPanel(SectionPanel):
     def __init__(self, parent=None):
+        """Initialize the Combat Stats panel (section 5)."""
         super().__init__(5, "Combat Stats", parent)
 
     def refresh(self, char_data: dict):
+        """Rebuild AC, initiative, speed, HP, hit dice, and death save widgets from combat_stats data."""
         self._clear()
         combat = char_data.get("combat_stats", {})
         info   = char_data.get("character_info", {})
@@ -522,6 +559,7 @@ class _WeaponRow(QWidget):
 
     def __init__(self, idx: int, name: str, atk_bonus: str,
                  damage_display: str, on_click, parent=None):
+        """Build a single weapon row with name, attack bonus, damage display, and a dice icon."""
         super().__init__(parent)
         self._on_click  = on_click
         self._bg_normal = CPD if idx % 2 == 0 else CP
@@ -541,6 +579,7 @@ class _WeaponRow(QWidget):
         rlo.addWidget(dice_ico)
 
     def mousePressEvent(self, e):
+        """Call the weapon's on_click callback on a left-button press."""
         if e.button() == Qt.MouseButton.LeftButton:
             self._on_click()
             e.accept()
@@ -548,10 +587,12 @@ class _WeaponRow(QWidget):
             super().mousePressEvent(e)
 
     def enterEvent(self, e):
+        """Highlight the row on mouse enter."""
         self.setStyleSheet(f"background:{CPH};border:none;")
         super().enterEvent(e)
 
     def leaveEvent(self, e):
+        """Restore the alternating row background on mouse leave."""
         self.setStyleSheet(f"background:{self._bg_normal};border:none;")
         super().leaveEvent(e)
 
@@ -562,9 +603,11 @@ class AttacksPanel(SectionPanel):
     weapon_clicked = pyqtSignal(str, str, str)   # name, atk_bonus, damage_dice
 
     def __init__(self, parent=None):
+        """Initialize the Attacks & Spellcasting panel (section 6)."""
         super().__init__(6, "Attacks & Spellcasting", parent)
 
     def refresh(self, char_data: dict):
+        """Rebuild the attack rows and optional spell stats from the attacks_spells data."""
         self._clear()
         data  = char_data.get("attacks_spells", {})
         atks  = data.get("attacks", [])
@@ -618,9 +661,11 @@ COIN_LABELS = ["CP", "SP", "EP", "GP", "PP"]
 
 class EquipmentPanel(SectionPanel):
     def __init__(self, parent=None):
+        """Initialize the Equipment & Currency panel (section 7)."""
         super().__init__(7, "Equipment & Currency", parent)
 
     def refresh(self, char_data: dict):
+        """Rebuild the currency coins row and item list from the equipment data."""
         self._clear()
         equip    = char_data.get("equipment", {})
         items    = equip.get("items", [])
@@ -686,9 +731,11 @@ class PersonalityPanel(SectionPanel):
     ]
 
     def __init__(self, parent=None):
+        """Initialize the Personality panel (section 8)."""
         super().__init__(8, "Personality", parent)
 
     def refresh(self, char_data: dict):
+        """Rebuild the four personality text boxes (traits, ideals, bonds, flaws)."""
         self._clear()
         pers = char_data.get("personality", {})
 
@@ -720,9 +767,11 @@ class PersonalityPanel(SectionPanel):
 
 class FeaturesPanel(SectionPanel):
     def __init__(self, parent=None):
+        """Initialize the Features & Traits panel (section 9)."""
         super().__init__(9, "Features & Traits", parent)
 
     def refresh(self, char_data: dict):
+        """Rebuild the feature list showing name and a truncated description snippet per feature."""
         self._clear()
         feat_list = (char_data.get("features") or {}).get("features", [])
 
@@ -758,9 +807,11 @@ class ProfPanel(SectionPanel):
     ]
 
     def __init__(self, parent=None):
+        """Initialize the Proficiencies & Languages panel (section 10)."""
         super().__init__(10, "Proficiencies & Languages", parent)
 
     def refresh(self, char_data: dict):
+        """Rebuild proficiency category blocks (armor, weapons, tools, languages) from saved data."""
         self._clear()
         profs = char_data.get("proficiencies", {})
 
@@ -793,15 +844,12 @@ class ProfPanel(SectionPanel):
 # ── Main SheetView ────────────────────────────────────────────────────────────
 
 class SheetView(QWidget):
-    """
-    The full character sheet UI. Emits section_clicked(int) when any
-    section panel is clicked, and weapon_attacked(name, atk_bonus, damage)
-    when a weapon row is clicked. Call refresh(char_data) after any data change.
-    """
+    """Full 4-column character sheet. Emits section_clicked(int) on panel clicks and weapon_attacked(name, atk_bonus, damage) on weapon row clicks."""
     section_clicked = pyqtSignal(int)
     weapon_attacked = pyqtSignal(str, str, str)
 
     def __init__(self, parent=None):
+        """Build the info header, four column layouts, and connect all inter-panel signals."""
         super().__init__(parent)
         self.setStyleSheet(f"background:{CP};")
 
@@ -871,6 +919,7 @@ class SheetView(QWidget):
         body.addLayout(c4, 25)
 
     def refresh(self, char_data: dict):
+        """Push updated character data to every panel so the full sheet redraws."""
         for panel in (
             self._info, self._ability, self._saves, self._skills,
             self._combat, self._attacks, self._equip,

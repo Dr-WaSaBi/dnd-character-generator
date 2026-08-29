@@ -1,3 +1,14 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║     ⚔  D&D 5e CHARACTER GENERATOR  ⚔                               ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  File    : ui/editors/saving_throws.py                               ║
+# ║  Created : 2026-05-13                                                ║
+# ║  Version : 1.0.1                                                     ║
+# ╠══════════════════════════════════════════════════════════════════════╣
+# ║  Editor dialog for the six saving throw proficiencies. Auto-applies  ║
+# ║  class proficiencies based on CHARACTER_INFO data.                   ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QPushButton, QWidget,
@@ -38,19 +49,23 @@ CLASS_SAVES: dict[str, list[str]] = {
 
 
 def _prof_bonus(level: int) -> int:
+    """Return the proficiency bonus for the given character level."""
     return 2 + (level - 1) // 4
 
 
 def _mod(score: int) -> int:
+    """Return the D&D ability modifier for the given score: (score - 10) // 2."""
     return (score - 10) // 2
 
 
 def _fmt(val: int) -> str:
+    """Format an integer as a signed string (e.g. 3 → '+3', -1 → '-1')."""
     return f"+{val}" if val >= 0 else str(val)
 
 
 def _lbl(text, color, family, size, bold=False, italic=False,
          align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+    """Create a styled QLabel with the given text, color, font, and alignment."""
     w = QLabel(text)
     w.setAlignment(align)
     css = (f"color:{color};font-family:{family};font-size:{size}pt;"
@@ -64,6 +79,7 @@ def _lbl(text, color, family, size, bold=False, italic=False,
 
 
 def _rule() -> QFrame:
+    """Return a 1px gold horizontal rule widget for visual section separation."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
     f.setFixedHeight(1)
@@ -92,6 +108,7 @@ class SaveRow(QWidget):
 
     def __init__(self, ability: str, score: int | None, prof: bool,
                  prof_bonus: int, parent=None):
+        """Build the row widget showing the ability abbreviation, score, modifier, and computed save bonus."""
         super().__init__(parent)
         self.ability = ability
         self._score = score
@@ -101,6 +118,7 @@ class SaveRow(QWidget):
         self._build()
 
     def _build(self):
+        """Lay out the proficiency toggle, ability labels, score, modifier, arrow, and save bonus."""
         row = QHBoxLayout(self)
         row.setContentsMargins(6, 4, 6, 4)
         row.setSpacing(12)
@@ -159,12 +177,14 @@ class SaveRow(QWidget):
         row.addStretch()
 
     def _calc_bonus_str(self) -> str:
+        """Compute and return the formatted saving throw bonus (modifier + proficiency if proficient)."""
         if self._score is None:
             return "—"
         total = _mod(self._score) + (self._prof_bonus if self._prof else 0)
         return _fmt(total)
 
     def _on_toggle(self):
+        """Toggle proficiency on/off, update button appearance, and recalculate the bonus label."""
         self._prof = not self._prof
         self._toggle.setText("★" if self._prof else "☆")
         self._toggle.setStyleSheet(self._BTN_ON if self._prof else self._BTN_OFF)
@@ -173,15 +193,18 @@ class SaveRow(QWidget):
         self.toggled.emit(self.ability, self._prof)
 
     def update_score(self, score: int | None):
+        """Update the ability score, refresh the score/modifier labels and recalculate the bonus."""
         self._score = score
         self._score_lbl.setText(str(score) if score is not None else "—")
         self._mod_lbl.setText(_fmt(_mod(score)) if score is not None else "—")
         self._bonus_lbl.setText(self._calc_bonus_str())
 
     def is_proficient(self) -> bool:
+        """Return True if this saving throw has proficiency checked."""
         return self._prof
 
     def set_proficient(self, v: bool):
+        """Set proficiency to v, toggling the button if the state differs."""
         if self._prof != v:
             self._on_toggle()
 
@@ -190,6 +213,7 @@ class SavingThrowEditor(QDialog):
     throws_saved = pyqtSignal(dict)   # {"STR": True, "DEX": False, ...}
 
     def __init__(self, char_data: dict, existing: dict | None = None, parent=None):
+        """Initialize the dialog, derive proficiency bonus and class saves, then build the UI."""
         super().__init__(parent)
         self.setWindowTitle("Section ③  —  Saving Throws")
         self.setMinimumSize(500, 480)
@@ -219,6 +243,7 @@ class SavingThrowEditor(QDialog):
         self._build_ui()
 
     def _build_ui(self):
+        """Build the info strip, column headers, six SaveRow widgets, and Save/Cancel buttons."""
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 22, 28, 20)
         root.setSpacing(12)
@@ -303,6 +328,7 @@ class SavingThrowEditor(QDialog):
 
     @staticmethod
     def _mk_btn(label: str, secondary: bool) -> QPushButton:
+        """Create a styled primary (dark red) or secondary (parchment) push button."""
         btn = QPushButton(label)
         btn.setFixedHeight(36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -323,6 +349,7 @@ class SavingThrowEditor(QDialog):
         return btn
 
     def _on_save(self):
+        """Collect proficiency state from all rows, emit throws_saved, and close the dialog."""
         out = {ab: self._rows[ab].is_proficient() for ab in ABILITIES}
         self.throws_saved.emit(out)
         self.accept()
